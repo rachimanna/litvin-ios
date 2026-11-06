@@ -35,10 +35,18 @@ jobs:
         run: |
           set -x
           mkdir -p /Users/Shared
-          git clone --recursive -j8 https://github.com/TelegramMessenger/Telegram-iOS.git /Users/Shared/telegram-ios
+          # Clone without submodules, switch to the pinned ref, and only then fetch
+          # the submodules of that ref: master's submodule pointers can reference
+          # commits that are not fetchable (e.g. tgcalls), which breaks --recursive.
+          git clone https://github.com/TelegramMessenger/Telegram-iOS.git /Users/Shared/telegram-ios
           cd /Users/Shared/telegram-ios
           git checkout "${{ steps.ref.outputs.ref }}"
-          git submodule update --init --recursive
+          for attempt in 1 2 3; do
+            git submodule update --init --recursive -j8 && break
+            echo "submodule update failed (attempt $attempt), retrying..."
+            sleep 15
+          done
+          git submodule status --recursive | grep -E '^[-+U]' && { echo "submodules are not checked out"; exit 1; } || true
 
       - name: Select Xcode from versions.json
         run: |
