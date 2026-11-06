@@ -14,7 +14,7 @@
 - Voice changer: Злой, Девушка, Ребёнок, Пиксель, Робот, Вокал + sliders for pitch, effect strength, volume and echo. Applies to recorded voice messages, 1:1 calls and group calls (tgcalls capture post-processing; in group calls it runs after Telegram's own level/noise-suppression processor). One switch for everything: voice messages, calls and group calls. Litvin → Смена голоса.
 
 - App name "Litvin" (CFBundleDisplayName) under the icon and above the app-switcher card.
-- "LITVIN" black-and-white pill hidden under the Dynamic Island / notch: invisible on the device, shows up on screenshots and screen recordings. Litvin → Значок Litvin сверху (on by default).
+- "LITVIN" black-and-white pill hidden under the Dynamic Island / notch: invisible on the device, shows up on screenshots and screen recordings. Built in, always on.
 
 ## [0.2.1] — 2026-11-06
 - Login (intro) screen: the paper-plane animation is replaced with the Litvin logo.

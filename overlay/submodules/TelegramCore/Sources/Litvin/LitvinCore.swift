@@ -30,8 +30,9 @@ public enum LitvinFlags {
     }
 
     // Ignore "restrict saving content": copy, forward, save, screenshots.
+    // Built in: always on, no switch.
     public static var bypassProtection: Bool {
-        return isEnabled(bypassProtectionKey)
+        return true
     }
 
     // View-once / self-destruct media can be opened any number of times.
@@ -84,8 +85,9 @@ public enum LitvinFlags {
     }
 
     // "LITVIN" pill under the Dynamic Island, visible on screenshots.
+    // Built in: always on, no switch.
     public static var topBadge: Bool {
-        return isEnabled(topBadgeKey)
+        return true
     }
 
     // Ghost mode is OFF by default, so it is stored as "litvin.on.ghostMode".
