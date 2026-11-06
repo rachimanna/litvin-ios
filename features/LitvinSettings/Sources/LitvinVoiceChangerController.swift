@@ -133,7 +133,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
                 arguments.update { $0.calls = value }
             })
         case .scopeInfo:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Для звонков голос выбирается в начале звонка: поменяй настройки до звонка. Работает в звонках один на один, не в групповых."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Работает в обычных и групповых звонках. Голос выбирается в начале звонка: поменяй настройки до звонка или перезайди в групповой звонок."), sectionId: self.section)
         }
     }
 }

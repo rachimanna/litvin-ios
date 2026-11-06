@@ -1,6 +1,7 @@
 #include "utils/LitvinVoiceProcessing.h"
 
 #include <string>
+#include <utility>
 
 #include "modules/audio_processing/audio_buffer.h"
 #include "utils/LitvinVoiceDsp.h"
@@ -108,7 +109,61 @@ private:
     std::unique_ptr<VoiceDsp> _dsp;
 };
 
+class ChainedProcessing : public webrtc::CustomProcessing {
+public:
+    ChainedProcessing(std::unique_ptr<webrtc::CustomProcessing> first, std::unique_ptr<webrtc::CustomProcessing> second) :
+    _first(std::move(first)),
+    _second(std::move(second)) {
+    }
+
+    void Initialize(int sample_rate_hz, int num_channels) override {
+        if (_first) {
+            _first->Initialize(sample_rate_hz, num_channels);
+        }
+        if (_second) {
+            _second->Initialize(sample_rate_hz, num_channels);
+        }
+    }
+
+    void Process(webrtc::AudioBuffer *buffer) override {
+        if (_first) {
+            _first->Process(buffer);
+        }
+        if (_second) {
+            _second->Process(buffer);
+        }
+    }
+
+    std::string ToString() const override {
+        return "LitvinChainedProcessing";
+    }
+
+    void SetRuntimeSetting(webrtc::AudioProcessing::RuntimeSetting setting) override {
+        if (_first) {
+            _first->SetRuntimeSetting(setting);
+        }
+        if (_second) {
+            _second->SetRuntimeSetting(setting);
+        }
+    }
+
+private:
+    std::unique_ptr<webrtc::CustomProcessing> _first;
+    std::unique_ptr<webrtc::CustomProcessing> _second;
+};
+
 } // namespace
+
+std::unique_ptr<webrtc::CustomProcessing> WrapWithVoiceChanger(std::unique_ptr<webrtc::CustomProcessing> inner) {
+    std::unique_ptr<webrtc::CustomProcessing> voice = CreateVoiceChangerProcessing();
+    if (!voice) {
+        return inner;
+    }
+    if (!inner) {
+        return voice;
+    }
+    return std::make_unique<ChainedProcessing>(std::move(inner), std::move(voice));
+}
 
 std::unique_ptr<webrtc::CustomProcessing> CreateVoiceChangerProcessing() {
     VoiceSettings settings = currentSettings();

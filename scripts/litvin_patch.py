@@ -465,6 +465,67 @@ def patch_call_voice(text, label):
     return text[:pos] + "#include \"utils/LitvinVoiceProcessing.h\"\n" + text[pos:]
 
 
+def wrap_call_argument(call_start, wrapper, expected):
+    """`f(<arg>)` -> `f(wrapper(<arg>))` for every call starting with `call_start` (ends at its '(')."""
+    def fn(text, label):
+        if f"{call_start}{wrapper}(" in text:
+            return text
+        out, pos, count = [], 0, 0
+        while True:
+            idx = text.find(call_start, pos)
+            if idx < 0:
+                break
+            open_idx = idx + len(call_start) - 1
+            depth, end = 0, None
+            for j in range(open_idx, len(text)):
+                if text[j] == "(":
+                    depth += 1
+                elif text[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = j
+                        break
+            if end is None:
+                raise SystemExit(f"[litvin_patch] unbalanced call ({label}): {call_start!r}")
+            out.append(text[pos:open_idx + 1])
+            out.append(f"{wrapper}({text[open_idx + 1:end]})")
+            pos = end
+            count += 1
+        out.append(text[pos:])
+        if count != expected:
+            raise SystemExit(f"[litvin_patch] expected {expected} calls of {call_start!r}, found {count} ({label})")
+        return "".join(out)
+    return fn
+
+
+def add_cpp_include(header):
+    def fn(text, label):
+        line = f'#include "{header}"\n'
+        if line in text:
+            return text
+        first = re.search(r"^#include [^\n]+\n", text, re.MULTILINE)
+        if first is None:
+            raise SystemExit(f"[litvin_patch] no #include ({label})")
+        return text[:first.end()] + line + text[first.end():]
+    return fn
+
+
+def patch_group_call_fallback(text, label):
+    # When Telegram installs no post-processor (no audio-level callback), add ours alone.
+    return insert_after(
+        text,
+        r"            peerConnectionFactoryDeps\.audio_processing = builder\.Create\(\);\n        \}\n#endif\n",
+        "        if (!peerConnectionFactoryDeps.audio_processing) {\n"
+        "            if (auto litvinVoice = litvin::CreateVoiceChangerProcessing()) {\n"
+        "                webrtc::AudioProcessingBuilder litvinBuilder;\n"
+        "                litvinBuilder.SetCapturePostProcessing(std::move(litvinVoice));\n"
+        "                peerConnectionFactoryDeps.audio_processing = litvinBuilder.Create();\n"
+        "            }\n"
+        "        }\n",
+        label,
+    )
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -521,6 +582,20 @@ def main():
     tgcalls = "submodules/TgVoipWebrtc/tgcalls/tgcalls"
     for rel in ("v2/InstanceV2Impl.cpp", "v2/InstanceV2ReferenceImpl.cpp", "v2/InstanceV2CompatImpl.cpp", "v2wasm/CallCoreHost.cpp"):
         edit(root, f"{tgcalls}/{rel}", patch_call_voice)
+    voice_header = add_cpp_include("utils/LitvinVoiceProcessing.h")
+    edit(root, f"{tgcalls}/group/GroupInstanceCustomImpl.cpp", chain(
+        voice_header,
+        wrap_call_argument("builder.SetCapturePostProcessing(", "litvin::WrapWithVoiceChanger", 1),
+        patch_group_call_fallback,
+    ))
+    edit(root, f"{tgcalls}/group/GroupInstanceReferenceImpl.cpp", chain(
+        voice_header,
+        wrap_call_argument("builder.SetCapturePostProcessing(", "litvin::WrapWithVoiceChanger", 1),
+    ))
+    edit(root, f"{tgcalls}/MediaManager.cpp", chain(
+        voice_header,
+        wrap_call_argument("builder.SetCapturePostProcessing(", "litvin::WrapWithVoiceChanger", 1),
+    ))
 
 
 if __name__ == "__main__":
