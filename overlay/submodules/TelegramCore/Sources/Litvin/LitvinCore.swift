@@ -1,5 +1,6 @@
 import Foundation
 import Postbox
+import SwiftSignalKit
 
 // Litvin runtime switches. Stored as "litvin.off.<key>" so every feature is ON
 // by default (missing key == enabled). Read from TelegramCore, TelegramUI and
@@ -30,6 +31,107 @@ public enum LitvinFlags {
     // View-once / self-destruct media can be opened any number of times.
     public static var unlimitedViewOnce: Bool {
         return isEnabled(unlimitedViewOnceKey)
+    }
+
+    // Ghost mode is OFF by default, so it is stored as "litvin.on.ghostMode".
+    public static let ghostModeKey = "litvin.on.ghostMode"
+
+    // No read receipts, no typing, no online status.
+    public static var ghostMode: Bool {
+        return UserDefaults.standard.bool(forKey: ghostModeKey)
+    }
+
+    public static func setGhostMode(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: ghostModeKey)
+    }
+}
+
+// Voice changer settings, shared by the voice-message recorder (Swift) and the
+// call audio pipeline (C++ reads the same keys through CFPreferences).
+public struct LitvinVoiceSettings: Equatable {
+    public enum Preset: Int, CaseIterable {
+        case off = 0
+        case angry = 1
+        case girl = 2
+        case child = 3
+        case pixel = 4
+        case robot = 5
+        case vocal = 6
+
+        public var title: String {
+            switch self {
+            case .off: return "Выключено"
+            case .angry: return "Злой"
+            case .girl: return "Девушка"
+            case .child: return "Ребёнок"
+            case .pixel: return "Пиксель"
+            case .robot: return "Робот"
+            case .vocal: return "Вокал"
+            }
+        }
+    }
+
+    public var preset: Preset
+    // Extra pitch on top of the preset, in semitones (-12 ... 12).
+    public var pitch: Double
+    // How much of the effect is heard: 0 = original voice, 1 = only the effect.
+    public var strength: Double
+    // Output volume, 0 ... 2 (1 = unchanged).
+    public var volume: Double
+    // Added echo / reverb, 0 ... 1.
+    public var echo: Double
+    public var voiceMessages: Bool
+    public var calls: Bool
+
+    public static let presetKey = "litvin.voice.preset"
+    public static let pitchKey = "litvin.voice.pitch"
+    public static let strengthKey = "litvin.voice.strength"
+    public static let volumeKey = "litvin.voice.volume"
+    public static let echoKey = "litvin.voice.echo"
+    public static let voiceMessagesKey = "litvin.voice.messages"
+    public static let callsKey = "litvin.voice.calls"
+
+    private static func double(_ key: String, _ defaultValue: Double) -> Double {
+        if let value = UserDefaults.standard.object(forKey: key) as? NSNumber {
+            return value.doubleValue
+        }
+        return defaultValue
+    }
+
+    private static func bool(_ key: String, _ defaultValue: Bool) -> Bool {
+        if let value = UserDefaults.standard.object(forKey: key) as? NSNumber {
+            return value.boolValue
+        }
+        return defaultValue
+    }
+
+    public static var current: LitvinVoiceSettings {
+        let defaults = UserDefaults.standard
+        return LitvinVoiceSettings(
+            preset: Preset(rawValue: defaults.integer(forKey: presetKey)) ?? .off,
+            pitch: double(pitchKey, 0.0),
+            strength: double(strengthKey, 1.0),
+            volume: double(volumeKey, 1.0),
+            echo: double(echoKey, 0.0),
+            voiceMessages: bool(voiceMessagesKey, true),
+            calls: bool(callsKey, true)
+        )
+    }
+
+    public func save() {
+        let defaults = UserDefaults.standard
+        defaults.set(self.preset.rawValue, forKey: LitvinVoiceSettings.presetKey)
+        defaults.set(self.pitch, forKey: LitvinVoiceSettings.pitchKey)
+        defaults.set(self.strength, forKey: LitvinVoiceSettings.strengthKey)
+        defaults.set(self.volume, forKey: LitvinVoiceSettings.volumeKey)
+        defaults.set(self.echo, forKey: LitvinVoiceSettings.echoKey)
+        defaults.set(self.voiceMessages, forKey: LitvinVoiceSettings.voiceMessagesKey)
+        defaults.set(self.calls, forKey: LitvinVoiceSettings.callsKey)
+    }
+
+    // Anything to do at all (a preset, or echo / pitch / volume changed by hand).
+    public var isActive: Bool {
+        return self.preset != .off || abs(self.pitch) > 0.01 || self.echo > 0.01 || abs(self.volume - 1.0) > 0.01
     }
 }
 
@@ -139,4 +241,13 @@ func litvinIsRawCopyProtected(transaction: Transaction, message: Message) -> Boo
         }
     }
     return false
+}
+
+// Ghost mode: drop a request that would reveal activity (read receipts,
+// typing, "listened"). Completes immediately so callers carry on as if sent.
+func litvinGhostRequest<T, E>(_ request: @autoclosure () -> Signal<T, E>) -> Signal<T, E> {
+    if LitvinFlags.ghostMode {
+        return .complete()
+    }
+    return request()
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.0] — 2026-11-06
+- Ghost mode (off by default): no read receipts (chats, channels, threads, secret chats), no typing, no "listened" for voice/video notes, no online status. Litvin → Призрачный режим.
+- Voice changer: Злой, Девушка, Ребёнок, Пиксель, Робот, Вокал + sliders for pitch, effect strength, volume and echo. Applies to recorded voice messages and to 1:1 calls (tgcalls capture post-processing). Litvin → Смена голоса.
+
 ## [0.2.1] — 2026-11-06
 - Login (intro) screen: the paper-plane animation is replaced with the Litvin logo.
 - App switcher: while the app is inactive a Litvin cover (crimson → violet gradient, logo, "Litvin") hides the chats, like banking apps do.

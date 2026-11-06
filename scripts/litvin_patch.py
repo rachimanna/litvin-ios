@@ -365,6 +365,106 @@ def patch_privacy_cover(text, label):
     )
 
 
+# ---------------------------------------------------------------------------
+# Ghost mode: no read receipts, typing, "listened" or online status.
+# ---------------------------------------------------------------------------
+
+def wrap_calls(start, wrapper, expected):
+    """Wrap every `start...)` call expression (balanced parens) as `wrapper(<call>)`."""
+    def fn(text, label):
+        if f"{wrapper}({start}" in text:
+            return text
+        out = []
+        pos = 0
+        count = 0
+        while True:
+            idx = text.find(start, pos)
+            if idx < 0:
+                break
+            depth = 0
+            end = None
+            for j in range(idx + start.index("("), len(text)):
+                ch = text[j]
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = j + 1
+                        break
+            if end is None:
+                raise SystemExit(f"[litvin_patch] unbalanced call ({label}): {start!r}")
+            out.append(text[pos:idx])
+            out.append(f"{wrapper}({text[idx:end]})")
+            pos = end
+            count += 1
+        out.append(text[pos:])
+        if count != expected:
+            raise SystemExit(f"[litvin_patch] expected {expected} calls of {start!r}, found {count} ({label})")
+        return "".join(out)
+    return fn
+
+
+def chain(*fns):
+    def fn(text, label):
+        for f in fns:
+            text = f(text, label)
+        return text
+    return fn
+
+
+def patch_ghost_presence(text, label):
+    return insert_after(
+        text,
+        r"    private func updatePresence\(_ isOnline: Bool\) \{\n",
+        "        if LitvinFlags.ghostMode {\n"
+        "            self.onlineTimer?.invalidate()\n"
+        "            self.onlineTimer = nil\n"
+        "            return\n"
+        "        }\n",
+        label,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Voice changer: voice/video messages (Swift) and 1:1 calls (tgcalls C++).
+# ---------------------------------------------------------------------------
+
+def patch_voice_recorder(text, label):
+    text = insert_after(
+        text,
+        r"    private var micLevelPeak: Int16 = 0\n",
+        "    private let litvinVoiceChanger = LitvinVoiceChanger(sampleRate: 48000.0)\n",
+        label,
+    )
+    return replace_once(
+        text,
+        "            } else {\n                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n",
+        "            } else {\n                self.litvinVoiceChanger.process(currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n"
+        "                self.processWaveformPreview(samples: currentEncoderPacket.assumingMemoryBound(to: Int16.self), count: currentEncoderPacketSize / 2)\n",
+        label,
+    )
+
+
+def patch_call_voice(text, label):
+    if "litvin::CreateVoiceChangerProcessing" in text:
+        return text
+    text, count = re.subn(
+        r"^(\s*)(webrtc::\s*AudioProcessingBuilder builder;\n)",
+        lambda m: m.group(1) + m.group(2) + m.group(1) + "builder.SetCapturePostProcessing(litvin::CreateVoiceChangerProcessing());\n",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if count != 1:
+        raise SystemExit(f"[litvin_patch] AudioProcessingBuilder not found ({label})")
+    first_include = re.search(r"^#include [^\n]+\n", text, re.MULTILINE)
+    if first_include is None:
+        raise SystemExit(f"[litvin_patch] no #include ({label})")
+    pos = first_include.end()
+    return text[:pos] + "#include \"utils/LitvinVoiceProcessing.h\"\n" + text[pos:]
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -396,6 +496,31 @@ def main():
     edit(root, "submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m", patch_intro_logo)
     edit(root, "submodules/TelegramUI/Sources/AppDelegate.swift", patch_privacy_cover)
     write_custom_logo_swift(root)
+
+    state = f"{core}/State"
+    edit(root, f"{state}/SynchronizePeerReadState.swift", chain(
+        wrap_calls("network.request(Api.functions.channels.readHistory(", "litvinGhostRequest", 1),
+        wrap_calls("network.request(Api.functions.messages.readHistory(", "litvinGhostRequest", 1),
+        wrap_calls("network.request(Api.functions.messages.readEncryptedHistory(", "litvinGhostRequest", 1),
+    ))
+    edit(root, f"{core}/TelegramEngine/Messages/ApplyMaxReadIndexInteractively.swift",
+         wrap_calls("network.request(Api.functions.messages.readDiscussion(", "litvinGhostRequest", 3))
+    edit(root, f"{core}/TelegramEngine/Messages/ReplyThreadHistory.swift",
+         wrap_calls("strongSelf.account.network.request(Api.functions.messages.readDiscussion(", "litvinGhostRequest", 1))
+    edit(root, f"{state}/ManagedLocalInputActivities.swift", chain(
+        wrap_calls("network.request(Api.functions.messages.setTyping(", "litvinGhostRequest", 1),
+        wrap_calls("network.request(Api.functions.messages.setEncryptedTyping(", "litvinGhostRequest", 1),
+    ))
+    edit(root, f"{state}/ManagedSynchronizeConsumeMessageContentsOperations.swift", chain(
+        wrap_calls("network.request(Api.functions.messages.readMessageContents(", "litvinGhostRequest", 1),
+        wrap_calls("network.request(Api.functions.channels.readMessageContents(", "litvinGhostRequest", 1),
+    ))
+    edit(root, f"{state}/ManagedAccountPresence.swift", patch_ghost_presence)
+
+    edit(root, "submodules/TelegramUI/Sources/ManagedAudioRecorder.swift", patch_voice_recorder)
+    tgcalls = "submodules/TgVoipWebrtc/tgcalls/tgcalls"
+    for rel in ("v2/InstanceV2Impl.cpp", "v2/InstanceV2ReferenceImpl.cpp", "v2/InstanceV2CompatImpl.cpp", "v2wasm/CallCoreHost.cpp"):
+        edit(root, f"{tgcalls}/{rel}", patch_call_voice)
 
 
 if __name__ == "__main__":

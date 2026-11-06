@@ -16,6 +16,8 @@ swift_library(
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/ItemListUI:ItemListUI",
         "//submodules/PresentationDataUtils:PresentationDataUtils",
+        "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        "//submodules/UIKitRuntimeUtils:UIKitRuntimeUtils",
     ],
     visibility = [
         "//visibility:public",

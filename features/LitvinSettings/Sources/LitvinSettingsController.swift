@@ -8,31 +8,42 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "0.2.0"
+public let litvinVersion = "0.3.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
+    let toggleGhost: (Bool) -> Void
+    let openVoiceChanger: () -> Void
     let openSource: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, openSource: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, openVoiceChanger: @escaping () -> Void, openSource: @escaping () -> Void) {
         self.toggle = toggle
+        self.toggleGhost = toggleGhost
+        self.openVoiceChanger = openVoiceChanger
         self.openSource = openSource
     }
 }
 
 private enum LitvinSettingsSection: Int32 {
+    case ghost
+    case voice
     case messages
     case privacy
     case about
 }
 
 private struct LitvinSettingsState: Equatable {
+    var ghostMode: Bool
+    var voicePreset: String
     var keepDeleted: Bool
     var bypassProtection: Bool
     var unlimitedViewOnce: Bool
 
     static func current() -> LitvinSettingsState {
+        let voice = LitvinVoiceSettings.current
         return LitvinSettingsState(
+            ghostMode: LitvinFlags.ghostMode,
+            voicePreset: voice.isActive ? voice.preset.title : "Выключено",
             keepDeleted: LitvinFlags.keepDeleted,
             bypassProtection: LitvinFlags.bypassProtection,
             unlimitedViewOnce: LitvinFlags.unlimitedViewOnce
@@ -41,6 +52,10 @@ private struct LitvinSettingsState: Equatable {
 }
 
 private enum LitvinSettingsEntry: ItemListNodeEntry {
+    case ghostMode(String, Bool)
+    case ghostInfo(String)
+    case voiceChanger(String, String)
+    case voiceInfo(String)
     case messagesHeader(String)
     case keepDeleted(String, Bool)
     case keepDeletedInfo(String)
@@ -56,6 +71,10 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
+        case .ghostMode, .ghostInfo:
+            return LitvinSettingsSection.ghost.rawValue
+        case .voiceChanger, .voiceInfo:
+            return LitvinSettingsSection.voice.rawValue
         case .messagesHeader, .keepDeleted, .keepDeletedInfo:
             return LitvinSettingsSection.messages.rawValue
         case .privacyHeader, .bypassProtection, .bypassProtectionInfo, .unlimitedViewOnce, .unlimitedViewOnceInfo:
@@ -67,6 +86,10 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
+        case .ghostMode: return -4
+        case .ghostInfo: return -3
+        case .voiceChanger: return -2
+        case .voiceInfo: return -1
         case .messagesHeader: return 0
         case .keepDeleted: return 1
         case .keepDeletedInfo: return 2
@@ -84,6 +107,18 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     static func ==(lhs: LitvinSettingsEntry, rhs: LitvinSettingsEntry) -> Bool {
         switch lhs {
+        case let .ghostMode(a1, a2):
+            if case let .ghostMode(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
+            return false
+        case let .ghostInfo(a):
+            if case let .ghostInfo(b) = rhs { return a == b }
+            return false
+        case let .voiceChanger(a1, a2):
+            if case let .voiceChanger(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
+            return false
+        case let .voiceInfo(a):
+            if case let .voiceInfo(b) = rhs { return a == b }
+            return false
         case let .messagesHeader(a):
             if case let .messagesHeader(b) = rhs { return a == b }
             return false
@@ -130,6 +165,16 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! LitvinSettingsArguments
         switch self {
+        case let .ghostMode(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleGhost(value)
+            })
+        case let .voiceChanger(title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
+                arguments.openVoiceChanger()
+            })
+        case let .ghostInfo(text), let .voiceInfo(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .messagesHeader(text), let .privacyHeader(text), let .aboutHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .keepDeleted(title, value):
@@ -158,6 +203,10 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
 private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSettingsEntry] {
     return [
+        .ghostMode("Призрачный режим", state.ghostMode),
+        .ghostInfo("Собеседники не видят, что ты прочитал сообщения, печатаешь, прослушал голосовое или был онлайн. Если ты сам отправишь сообщение, Telegram покажет тебя в сети."),
+        .voiceChanger("Смена голоса", state.voicePreset),
+        .voiceInfo("Злой, девушка, ребёнок, пиксель, робот, вокал — для голосовых и звонков."),
         .messagesHeader("СООБЩЕНИЯ"),
         .keepDeleted("Удалённые сообщения", state.keepDeleted),
         .keepDeletedInfo("Если собеседник удалит сообщение, оно останется в чате, станет немного прозрачным и получит пометку «удалено» рядом со временем."),
@@ -175,10 +224,16 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
 
 public func litvinSettingsController(context: AccountContext) -> ViewController {
     let statePromise = ValuePromise(LitvinSettingsState.current(), ignoreRepeated: true)
+    var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = LitvinSettingsArguments(toggle: { key, value in
         LitvinFlags.setEnabled(key, value)
         statePromise.set(LitvinSettingsState.current())
+    }, toggleGhost: { value in
+        LitvinFlags.setGhostMode(value)
+        statePromise.set(LitvinSettingsState.current())
+    }, openVoiceChanger: {
+        pushControllerImpl?(litvinVoiceChangerController(context: context))
     }, openSource: {
         if let url = URL(string: "https://github.com/rachimanna/litvin-ios") {
             UIApplication.shared.open(url)
@@ -193,5 +248,12 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         return (controllerState, (listState, arguments))
     }
 
-    return ItemListController(context: context, state: signal)
+    let controller = ItemListController(context: context, state: signal)
+    controller.didAppear = { _ in
+        statePromise.set(LitvinSettingsState.current())
+    }
+    pushControllerImpl = { [weak controller] c in
+        (controller?.navigationController as? NavigationController)?.pushViewController(c)
+    }
+    return controller
 }
