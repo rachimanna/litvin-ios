@@ -21,7 +21,6 @@ private final class LitvinVoiceArguments {
 private enum LitvinVoiceSection: Int32 {
     case presets
     case tuning
-    case scope
 }
 
 private enum LitvinVoiceEntry: ItemListNodeEntry {
@@ -34,10 +33,6 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
     case echo(Double)
     case reset
     case tuningInfo
-    case scopeHeader
-    case voiceMessages(Bool)
-    case calls(Bool)
-    case scopeInfo
 
     var section: ItemListSectionId {
         switch self {
@@ -45,8 +40,6 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
             return LitvinVoiceSection.presets.rawValue
         case .tuningHeader, .pitch, .strength, .volume, .echo, .reset, .tuningInfo:
             return LitvinVoiceSection.tuning.rawValue
-        case .scopeHeader, .voiceMessages, .calls, .scopeInfo:
-            return LitvinVoiceSection.scope.rawValue
         }
     }
 
@@ -61,22 +54,16 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
         case .echo: return 24
         case .reset: return 25
         case .tuningInfo: return 26
-        case .scopeHeader: return 30
-        case .voiceMessages: return 31
-        case .calls: return 32
-        case .scopeInfo: return 33
         }
     }
 
     static func ==(lhs: LitvinVoiceEntry, rhs: LitvinVoiceEntry) -> Bool {
         switch (lhs, rhs) {
-        case (.presetsHeader, .presetsHeader), (.tuningHeader, .tuningHeader), (.reset, .reset), (.tuningInfo, .tuningInfo), (.scopeHeader, .scopeHeader), (.scopeInfo, .scopeInfo):
+        case (.presetsHeader, .presetsHeader), (.tuningHeader, .tuningHeader), (.reset, .reset), (.tuningInfo, .tuningInfo):
             return true
         case let (.preset(a1, a2), .preset(b1, b2)):
             return a1 == b1 && a2 == b2
         case let (.pitch(a), .pitch(b)), let (.strength(a), .strength(b)), let (.volume(a), .volume(b)), let (.echo(a), .echo(b)):
-            return a == b
-        case let (.voiceMessages(a), .voiceMessages(b)), let (.calls(a), .calls(b)):
             return a == b
         default:
             return false
@@ -121,19 +108,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
                 arguments.reset()
             })
         case .tuningInfo:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("«Сила эффекта» на 0% — твой обычный голос, на 100% — только эффект. Высота тона добавляется к выбранному голосу."), sectionId: self.section)
-        case .scopeHeader:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "ГДЕ ПРИМЕНЯТЬ", sectionId: self.section)
-        case let .voiceMessages(value):
-            return ItemListSwitchItem(presentationData: presentationData, title: "Голосовые сообщения", value: value, sectionId: self.section, style: .blocks, updated: { value in
-                arguments.update { $0.voiceMessages = value }
-            })
-        case let .calls(value):
-            return ItemListSwitchItem(presentationData: presentationData, title: "Звонки", value: value, sectionId: self.section, style: .blocks, updated: { value in
-                arguments.update { $0.calls = value }
-            })
-        case .scopeInfo:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Работает в обычных и групповых звонках. Голос выбирается в начале звонка: поменяй настройки до звонка или перезайди в групповой звонок."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Выбранный голос включается сразу везде: в голосовых, звонках и групповых звонках. «Сила эффекта» на 0% — твой обычный голос, на 100% — только эффект. В звонке голос берётся в момент входа."), sectionId: self.section)
         }
     }
 }
@@ -150,10 +125,6 @@ private func litvinVoiceEntries(_ settings: LitvinVoiceSettings) -> [LitvinVoice
     entries.append(.echo(settings.echo))
     entries.append(.reset)
     entries.append(.tuningInfo)
-    entries.append(.scopeHeader)
-    entries.append(.voiceMessages(settings.voiceMessages))
-    entries.append(.calls(settings.calls))
-    entries.append(.scopeInfo)
     return entries
 }
 

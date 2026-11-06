@@ -7,8 +7,8 @@
 
 namespace litvin {
 
-// Capture post-processor for 1:1 calls. Returns nullptr when the voice changer
-// is off (or disabled for calls), so the default WebRTC pipeline is untouched.
+// Capture post-processor for calls. Returns nullptr when the voice changer is
+// off, so the default WebRTC pipeline is untouched.
 std::unique_ptr<webrtc::CustomProcessing> CreateVoiceChangerProcessing();
 
 // For group calls, where Telegram already installs its own capture

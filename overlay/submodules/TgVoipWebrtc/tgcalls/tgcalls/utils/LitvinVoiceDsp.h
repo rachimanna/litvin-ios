@@ -16,8 +16,6 @@ struct VoiceSettings {
     double strength = 1.0;   // 0 = original voice, 1 = only effect
     double volume = 1.0;     // 0 ... 2
     double echo = 0.0;       // 0 ... 1
-    bool voiceMessages = true;
-    bool calls = true;
 
     bool isActive() const {
         return preset != 0 || std::fabs(pitch) > 0.01 || echo > 0.01 || std::fabs(volume - 1.0) > 0.01;

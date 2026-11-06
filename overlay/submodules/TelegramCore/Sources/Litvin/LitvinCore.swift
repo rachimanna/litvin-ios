@@ -46,8 +46,9 @@ public enum LitvinFlags {
     }
 }
 
-// Voice changer settings, shared by the voice-message recorder (Swift) and the
-// call audio pipeline (C++ reads the same keys through CFPreferences).
+// Voice changer settings: one switch for everything — voice messages, 1:1 calls
+// and group calls. The call audio pipeline (C++) reads the same keys through
+// CFPreferences.
 public struct LitvinVoiceSettings: Equatable {
     public enum Preset: Int, CaseIterable {
         case off = 0
@@ -80,27 +81,16 @@ public struct LitvinVoiceSettings: Equatable {
     public var volume: Double
     // Added echo / reverb, 0 ... 1.
     public var echo: Double
-    public var voiceMessages: Bool
-    public var calls: Bool
 
     public static let presetKey = "litvin.voice.preset"
     public static let pitchKey = "litvin.voice.pitch"
     public static let strengthKey = "litvin.voice.strength"
     public static let volumeKey = "litvin.voice.volume"
     public static let echoKey = "litvin.voice.echo"
-    public static let voiceMessagesKey = "litvin.voice.messages"
-    public static let callsKey = "litvin.voice.calls"
 
     private static func double(_ key: String, _ defaultValue: Double) -> Double {
         if let value = UserDefaults.standard.object(forKey: key) as? NSNumber {
             return value.doubleValue
-        }
-        return defaultValue
-    }
-
-    private static func bool(_ key: String, _ defaultValue: Bool) -> Bool {
-        if let value = UserDefaults.standard.object(forKey: key) as? NSNumber {
-            return value.boolValue
         }
         return defaultValue
     }
@@ -112,9 +102,7 @@ public struct LitvinVoiceSettings: Equatable {
             pitch: double(pitchKey, 0.0),
             strength: double(strengthKey, 1.0),
             volume: double(volumeKey, 1.0),
-            echo: double(echoKey, 0.0),
-            voiceMessages: bool(voiceMessagesKey, true),
-            calls: bool(callsKey, true)
+            echo: double(echoKey, 0.0)
         )
     }
 
@@ -125,8 +113,6 @@ public struct LitvinVoiceSettings: Equatable {
         defaults.set(self.strength, forKey: LitvinVoiceSettings.strengthKey)
         defaults.set(self.volume, forKey: LitvinVoiceSettings.volumeKey)
         defaults.set(self.echo, forKey: LitvinVoiceSettings.echoKey)
-        defaults.set(self.voiceMessages, forKey: LitvinVoiceSettings.voiceMessagesKey)
-        defaults.set(self.calls, forKey: LitvinVoiceSettings.callsKey)
     }
 
     // Anything to do at all (a preset, or echo / pitch / volume changed by hand).

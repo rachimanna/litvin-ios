@@ -37,7 +37,7 @@ final class LitvinVoiceChanger {
     init(sampleRate: Double = 48000.0, settings: LitvinVoiceSettings = .current) {
         self.sampleRate = Float(sampleRate)
         self.settings = settings
-        self.enabled = settings.voiceMessages && settings.isActive
+        self.enabled = settings.isActive
 
         var ratio: Float
         switch settings.preset {

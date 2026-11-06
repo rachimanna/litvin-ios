@@ -59,9 +59,6 @@ VoiceSettings currentSettings() {
     if (readPreference("litvin.voice.echo", &value)) {
         settings.echo = value;
     }
-    if (readPreference("litvin.voice.calls", &value)) {
-        settings.calls = value != 0.0;
-    }
     return settings;
 }
 
@@ -167,7 +164,7 @@ std::unique_ptr<webrtc::CustomProcessing> WrapWithVoiceChanger(std::unique_ptr<w
 
 std::unique_ptr<webrtc::CustomProcessing> CreateVoiceChangerProcessing() {
     VoiceSettings settings = currentSettings();
-    if (!settings.calls || !settings.isActive()) {
+    if (!settings.isActive()) {
         return nullptr;
     }
     return std::make_unique<VoiceChangerProcessing>(settings);
