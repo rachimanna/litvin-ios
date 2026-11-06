@@ -29,8 +29,10 @@ jobs:
           sudo xcode-select -p
           # Use whatever Xcode the runner provides; don't pin — macos-latest changes.
 
-      - name: Install Bazelisk
-        run: brew install bazelisk
+      - name: Install Bazelisk + librsvg
+        run: |
+          brew install bazelisk || true
+          brew install librsvg || true
 
       - name: Clone Telegram-iOS at pinned ref
         run: |

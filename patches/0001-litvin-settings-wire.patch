@@ -1,0 +1,79 @@
+From: Litvin <noreply@litvin.app>
+Subject: [PATCH] Wire LitvinSettings into PeerInfo settings screen
+
+Adds "Litvin" as a top entry in the settings list. Tapping it opens
+the LitvinSettings controller (grouped toggles per feature).
+
+Touches:
+  - submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
+  - submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
+  - submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+  - submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
+
+diff --git a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
+--- a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
++++ b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
+@@ -11,6 +11,7 @@ swift_library(
+         "-warnings-as-errors",
+     ],
+     deps = [
++        "//submodules/LitvinFeatures/LitvinSettings:LitvinSettings",
+         "//submodules/UrlWhitelist",
+         "//submodules/TelegramUI/Components/NavigationBarNode",
+         "//submodules/TelegramUI/Components/NavigationBarComponent",
+diff --git a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
+--- a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
++++ b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
+@@ -195,6 +195,7 @@ enum PeerInfoSettingsSection {
+     case profile
+     case premiumManagement
+     case stars
+     case ton
+     case wallet
++    case litvin
+ }
+
+diff --git a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+--- a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
++++ b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+@@ -13,8 +13,10 @@ import TelegramStringFormatting
+ import PeerNameColorItem
+ import WalletContext
++import LitvinSettings
+
+ enum SettingsSection: Int, CaseIterable {
++    case litvin
+     case edit
+     case phone
+     case accounts
+@@ -37,6 +39,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
+     var items: [SettingsSection: [PeerInfoScreenItem]] = [:]
+     for section in SettingsSection.allCases {
+         items[section] = []
+     }
+
++    items[.litvin]!.append(PeerInfoScreenActionItem(id: 0, text: "Litvin", icon: UIImage(bundleImageName: "Settings/MenuIcons/SavedMessages"), action: {
++        interaction.openSettings(.litvin)
++    }))
++
+     let setPhotoTitle: String
+diff --git a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
+--- a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
++++ b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
+@@ -17,6 +17,7 @@ import InstantPageCache
+ import WalletContext
+ import UndoUI
++import LitvinSettings
+
+ extension PeerInfoScreenNode {
+     func openSettings(section: PeerInfoSettingsSection) {
+@@ -307,7 +308,9 @@ extension PeerInfoScreenNode {
+                 return
+             }
+             push(self.context.sharedContext.makeWalletScreen(context: self.context))
++        case .litvin:
++            push(litvinSettingsController(context: self.context))
+         }
+     }
+
+     func setupFaqIfNeeded() {

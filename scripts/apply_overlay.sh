@@ -22,17 +22,18 @@ if [ -d "$LITVIN_ROOT/overlay" ]; then
   cp -R "$LITVIN_ROOT/overlay/." "$TG_ROOT/"
 fi
 
-# 2. Copy each features/<Module>/Sources into a new submodule under submodules/LitvinFeatures/
+# 2. Copy each features/<Module> as a new submodule under submodules/LitvinFeatures/
+# Preserves the Sources/ layout so BUILD files can use glob(["Sources/**/*.swift"]).
 LITVIN_SUBMOD="$TG_ROOT/submodules/LitvinFeatures"
 mkdir -p "$LITVIN_SUBMOD"
 for d in "$LITVIN_ROOT"/features/*/; do
   name="$(basename "$d")"
   echo "Overlay feature module: $name"
+  rm -rf "$LITVIN_SUBMOD/$name"
   mkdir -p "$LITVIN_SUBMOD/$name"
   if [ -d "$d/Sources" ]; then
-    cp -R "$d/Sources/." "$LITVIN_SUBMOD/$name/"
+    cp -R "$d/Sources" "$LITVIN_SUBMOD/$name/Sources"
   fi
-  # Copy BUILD files if present
   if [ -f "$d/BUILD" ]; then
     cp "$d/BUILD" "$LITVIN_SUBMOD/$name/BUILD"
   fi

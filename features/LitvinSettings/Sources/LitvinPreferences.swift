@@ -1,8 +1,9 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
+import TelegramCore
 
-public struct LitvinPreferences: Codable, Equatable, PreferencesEntry {
+public struct LitvinPreferences: Codable, Equatable {
     public var ghostMode: Bool
     public var ghostNoTyping: Bool
     public var ghostNoOnline: Bool
@@ -21,7 +22,7 @@ public struct LitvinPreferences: Codable, Equatable, PreferencesEntry {
     public var proxyPool: Bool
     public var localAI: Bool
 
-    public static let `default` = LitvinPreferences(
+    public static let defaultValue = LitvinPreferences(
         ghostMode: false,
         ghostNoTyping: false,
         ghostNoOnline: false,
@@ -40,30 +41,42 @@ public struct LitvinPreferences: Codable, Equatable, PreferencesEntry {
         proxyPool: false,
         localAI: false
     )
-
-    public func isEqual(to: PreferencesEntry) -> Bool {
-        guard let other = to as? LitvinPreferences else { return false }
-        return self == other
-    }
 }
 
-public extension PreferencesKeys {
-    static let litvinMain = ValueBoxKey(length: 4).setInt32(0, value: 0x4C545659) // 'LTVY'
+public extension SharedDataKeys {
+    static let litvinPreferences: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: 0x4C545658) // 'LTVX'
+        return key
+    }()
+}
+
+public func litvinPreferences(_ shared: SharedData) -> LitvinPreferences {
+    if let entry = shared.entries[SharedDataKeys.litvinPreferences],
+       let data = entry.data,
+       let value = try? JSONDecoder().decode(LitvinPreferences.self, from: data) {
+        return value
+    }
+    return .defaultValue
 }
 
 public func updateLitvinPreferences(
     accountManager: AccountManager<TelegramAccountManagerTypes>,
     _ mutate: @escaping (LitvinPreferences) -> LitvinPreferences
 ) -> Signal<Never, NoError> {
-    return accountManager.transaction { transaction -> Void in
+    return accountManager.transaction { transaction in
         transaction.updateSharedData(SharedDataKeys.litvinPreferences) { entry in
-            let current = entry?.get(LitvinPreferences.self) ?? .default
-            return PreferencesEntry(mutate(current))
+            let current: LitvinPreferences
+            if let entry = entry, let data = entry.data,
+               let value = try? JSONDecoder().decode(LitvinPreferences.self, from: data) {
+                current = value
+            } else {
+                current = .defaultValue
+            }
+            let updated = mutate(current)
+            let data = (try? JSONEncoder().encode(updated)) ?? Data()
+            return SharedDataEntry(data: data)
         }
     }
     |> ignoreValues
-}
-
-public extension SharedDataKeys {
-    static let litvinPreferences = ValueBoxKey(length: 4).setInt32(0, value: 0x4C545658) // 'LTVX'
 }

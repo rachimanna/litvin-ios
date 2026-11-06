@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Photos
 
 public enum InfiniteSelfDestruct {
@@ -7,7 +8,6 @@ public enum InfiniteSelfDestruct {
     }
 
     public static func suppressViewedReceipt(prefs: LitvinPreferences) -> Bool {
-        // Default: silent view
         return prefs.infiniteSelfDestruct
     }
 
@@ -27,5 +27,3 @@ public enum InfiniteSelfDestruct {
         }
     }
 }
-
-import UIKit
