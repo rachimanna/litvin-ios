@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.0] — 2026-11-07
+- Based on Telegram-iOS 13.1.2 (was 13.0.0), built on GitHub's xcode-27 runner (macOS 27, Xcode 27). 13.2 is not buildable from public sources yet: its tgcalls submodule commit is not published.
+- Edit history patch supports the new mergedServerMessageUpdate path of 13.1+.
+
 ## [1.2.0] — 2026-11-07
 - Appearance → App icon: 8 Litvin icons (Классика, Белая, Малиновая, Неон, Золото, Океан, Изумруд, Закат), none Premium-locked.
 - Appearance → theme colours: Litvin crimson accent with crimson/violet bubbles and a pattern wallpaper, first in Day Classic, Day and Night.

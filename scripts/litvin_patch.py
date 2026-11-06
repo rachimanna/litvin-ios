@@ -565,6 +565,15 @@ def patch_anti_ads(text, label):
 
 
 def patch_edit_history_core(text, label):
+    merged = "return .update(mergedServerMessageUpdate(previous: previousMessage, updated: message))"
+    if merged in text or "litvinApplyEditHistory(previous: previousMessage, merged:" in text:
+        # Telegram 13.1+
+        return replace_once(
+            text,
+            merged,
+            "return .update(litvinApplyEditHistory(previous: previousMessage, merged: mergedServerMessageUpdate(previous: previousMessage, updated: message)))",
+            label,
+        )
     return insert_after(
         text,
         r"case let \.EditMessage\(id, message\):\n[^\n]*\n\s*transaction\.updateMessage\(id, update: \{ previousMessage in\n[^\n]*\n[^\n]*\n\s*var updatedAttributes = message\.attributes\n",

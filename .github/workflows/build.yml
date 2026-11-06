@@ -14,7 +14,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Telegram 13.1+ needs Xcode 27.1 / macOS 27: GitHub's xcode-27 runner image.
+    runs-on: xcode-27
     timeout-minutes: 360
 
     steps:
@@ -49,14 +50,22 @@ jobs:
           git submodule status --recursive | grep -E '^[-+U]' && { echo "submodules are not checked out"; exit 1; } || true
 
       - name: Select Xcode from versions.json
+        id: xcode
         run: |
           cd /Users/Shared/telegram-ios
           XCODE_VERSION=$(python3 -c 'import json,sys;print(json.load(open("versions.json"))["xcode"])')
-          if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer
+          echo "Telegram wants Xcode ${XCODE_VERSION}. Installed:"
+          ls -d /Applications/Xcode*.app || true
+          XCODE_APP=""
+          for candidate in "/Applications/Xcode_${XCODE_VERSION}.app" /Applications/Xcode_${XCODE_VERSION}.*.app; do
+            if [ -d "$candidate" ]; then XCODE_APP="$candidate"; break; fi
+          done
+          if [ -n "$XCODE_APP" ]; then
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+            echo "override=" >> "$GITHUB_OUTPUT"
           else
-            echo "Xcode ${XCODE_VERSION} not installed; falling back to active Xcode."
-            ls /Applications | grep -E "^Xcode" || true
+            echo "Xcode ${XCODE_VERSION} not installed; building with the active Xcode."
+            echo "override=--overrideXcodeVersion" >> "$GITHUB_OUTPUT"
           fi
           xcodebuild -version
 
@@ -103,6 +112,7 @@ jobs:
           BUILD_NUMBER=$(( BUILD_NUMBER + BUILD_OFFSET ))
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
+            ${{ steps.xcode.outputs.override }} \
             --cacheDir=/Users/Shared/litvin-bazel-cache \
             build \
             --configurationPath=build-system/litvin-configuration.json \
