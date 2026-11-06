@@ -22,9 +22,12 @@ fi
 
 for p in "${patches[@]}"; do
   echo "Applying $(basename "$p")..."
-  git apply --whitespace=nowarn --reject --verbose "$p" || {
-    echo "Patch failed: $p" >&2
-    exit 1
+  git apply --ignore-whitespace --whitespace=nowarn --recount --verbose "$p" || {
+    echo "git apply refused $p — falling back to GNU patch -l (whitespace-lenient)..."
+    patch -l -p1 --no-backup-if-mismatch -i "$p" || {
+      echo "Patch failed: $p" >&2
+      exit 1
+    }
   }
 done
 
