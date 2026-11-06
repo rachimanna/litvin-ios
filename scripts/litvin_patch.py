@@ -526,11 +526,37 @@ def patch_group_call_fallback(text, label):
     )
 
 
+# ---------------------------------------------------------------------------
+# App name shown by iOS (home screen, app switcher header, Settings).
+# ---------------------------------------------------------------------------
+
+def patch_app_display_name(text, label):
+    if "<string>Litvin</string>" in text:
+        return text
+    text, count = re.subn(
+        r"(<key>CFBundleDisplayName</key>\s*<string>)Telegram(</string>)",
+        r"\1Litvin\2",
+        text,
+    )
+    if count < 1:
+        raise SystemExit(f"[litvin_patch] CFBundleDisplayName not found ({label})")
+    text = re.sub(r"(<key>CFBundleName</key>\s*<string>)Telegram(</string>)", r"\1Litvin\2", text)
+    return text
+
+
+def patch_localized_display_name(text, label):
+    return re.sub(r'^"CFBundleDisplayName" = "[^"]*";', '"CFBundleDisplayName" = "Litvin";', text, flags=re.MULTILINE)
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
     root = Path(sys.argv[1])
     edit(root, f"{PEERINFO}/BUILD", patch_build)
+    edit(root, "Telegram/BUILD", patch_app_display_name)
+    for strings in sorted(root.glob("Telegram/Telegram-iOS/*.lproj/InfoPlist.strings")):
+        if "CFBundleDisplayName" in strings.read_text(encoding="utf-8"):
+            edit(root, str(strings.relative_to(root)), patch_localized_display_name)
     edit(root, f"{PEERINFO}/Sources/PeerInfoScreen.swift", patch_section_enum)
     edit(root, f"{PEERINFO}/Sources/PeerInfoSettingsItems.swift", patch_settings_items)
     edit(root, f"{PEERINFO}/Sources/PeerInfoScreenSettingsActions.swift", patch_settings_actions)
