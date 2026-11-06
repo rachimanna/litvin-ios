@@ -5,6 +5,7 @@ a regex anchor, is idempotent, and fails loudly if the anchor is missing.
 
 Usage: python3 litvin_patch.py <tg-ios-root>
 """
+import base64
 import re
 import sys
 from pathlib import Path
@@ -246,6 +247,124 @@ def patch_view_once(text, label):
     )
 
 
+# ---------------------------------------------------------------------------
+# Branding: intro (login) logo + app-switcher cover.
+# ---------------------------------------------------------------------------
+
+INTRO_LOGO_C = r"""
+// Litvin: crimson disc with the white Litvin mark, replaces the paper plane.
+static UIImage *LitvinIntroLogoImage(CGFloat size) {
+    if (size < 1.0) {
+        size = 200.0;
+    }
+    if (LitvinCustomLogoBase64.length != 0) {
+        NSData *data = [[NSData alloc] initWithBase64EncodedString:LitvinCustomLogoBase64 options:0];
+        UIImage *custom = data != nil ? [UIImage imageWithData:data] : nil;
+        if (custom != nil) {
+            return custom;
+        }
+    }
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size)];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
+        CGContextRef context = rendererContext.CGContext;
+        CGRect circleRect = CGRectInset(CGRectMake(0.0, 0.0, size, size), size * 0.04, size * 0.04);
+
+        CGContextSaveGState(context);
+        CGContextAddEllipseInRect(context, circleRect);
+        CGContextClip(context);
+        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+        CGFloat components[12] = {
+            0xE0 / 255.0, 0x16 / 255.0, 0x3A / 255.0, 1.0,
+            0x9E / 255.0, 0x12 / 255.0, 0x50 / 255.0, 1.0,
+            0x4B / 255.0, 0x16 / 255.0, 0x83 / 255.0, 1.0
+        };
+        CGFloat locations[3] = {0.0, 0.55, 1.0};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(colorSpace, components, locations, 3);
+        CGContextDrawLinearGradient(context, gradient, CGPointMake(CGRectGetMinX(circleRect), CGRectGetMinY(circleRect)), CGPointMake(CGRectGetMaxX(circleRect), CGRectGetMaxY(circleRect)), 0);
+        CGGradientRelease(gradient);
+        CGColorSpaceRelease(colorSpace);
+        CGContextRestoreGState(context);
+
+        CGFloat scale = circleRect.size.width * 0.56 / 544.0;
+        CGFloat left = CGRectGetMidX(circleRect) - 272.0 * scale;
+        CGFloat top = CGRectGetMidY(circleRect) - 552.0 * scale / 2.0;
+
+        CGContextSetStrokeColorWithColor(context, [UIColor whiteColor].CGColor);
+        CGContextSetLineWidth(context, 88.0 * scale);
+        CGContextSetLineCap(context, kCGLineCapSquare);
+        CGContextSetLineJoin(context, kCGLineJoinMiter);
+        CGContextMoveToPoint(context, left, top + 552.0 * scale);
+        CGContextAddLineToPoint(context, left + 272.0 * scale, top);
+        CGContextAddLineToPoint(context, left + 544.0 * scale, top + 552.0 * scale);
+        CGContextStrokePath(context);
+        CGContextMoveToPoint(context, left + 104.0 * scale, top + 344.0 * scale);
+        CGContextAddLineToPoint(context, left + 440.0 * scale, top + 344.0 * scale);
+        CGContextStrokePath(context);
+    }];
+}
+"""
+
+
+def custom_logo_base64():
+    """branding/logo.png (if present) is embedded into the binary as base64."""
+    path = Path(__file__).resolve().parent.parent / "branding" / "logo.png"
+    if path.is_file():
+        print(f"[litvin_patch] embedding custom logo {path} ({path.stat().st_size} bytes)")
+        return base64.b64encode(path.read_bytes()).decode("ascii")
+    print("[litvin_patch] no branding/logo.png, using drawn Litvin logo")
+    return ""
+
+
+def patch_intro_logo(text, label):
+    logo = custom_logo_base64()
+    text = insert_after(
+        text,
+        r"#import <LegacyComponents/LegacyComponents\.h>\n",
+        f"\nstatic NSString *const LitvinCustomLogoBase64 = @\"{logo}\";\n" + INTRO_LOGO_C,
+        label,
+    )
+    text = insert_after(
+        text,
+        r"\[self setupGL\];\n\s*\[self\.view addSubview:_glkView\];\n",
+        "        {\n"
+        "            UIImageView *litvinLogoView = [[UIImageView alloc] initWithFrame:_glkView.bounds];\n"
+        "            litvinLogoView.image = LitvinIntroLogoImage(_glkView.bounds.size.width);\n"
+        "            litvinLogoView.contentMode = UIViewContentModeScaleAspectFit;\n"
+        "            litvinLogoView.backgroundColor = _backgroundColor;\n"
+        "            litvinLogoView.opaque = true;\n"
+        "            litvinLogoView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;\n"
+        "            [_glkView addSubview:litvinLogoView];\n"
+        "        }\n",
+        label,
+    )
+    return replace_once(
+        text,
+        "    UIImage *image = _glkView.snapshot;\n",
+        "    UIImage *image = LitvinIntroLogoImage(_glkView.bounds.size.width);\n",
+        label,
+    )
+
+
+def write_custom_logo_swift(root):
+    out = root / "submodules/TelegramUI/Sources/Litvin/LitvinCustomLogo.swift"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        "// Generated by scripts/litvin_patch.py from branding/logo.png. Do not edit.\n"
+        f"let litvinCustomLogoBase64: String = \"{custom_logo_base64()}\"\n",
+        encoding="utf-8",
+    )
+    print(f"[litvin_patch] wrote {out.relative_to(root)}")
+
+
+def patch_privacy_cover(text, label):
+    return insert_after(
+        text,
+        r"^        self\.nativeWindow = window\n",
+        "        LitvinPrivacyCover.shared.install(window: window)\n",
+        label,
+    )
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -273,6 +392,10 @@ def main():
     edit(root, "submodules/ScreenCaptureDetection/Sources/ScreenCaptureDetection.swift", patch_screenshot_detection)
 
     edit(root, f"{core}/TelegramEngine/Messages/MarkMessageContentAsConsumedInteractively.swift", patch_view_once)
+
+    edit(root, "submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m", patch_intro_logo)
+    edit(root, "submodules/TelegramUI/Sources/AppDelegate.swift", patch_privacy_cover)
+    write_custom_logo_swift(root)
 
 
 if __name__ == "__main__":
