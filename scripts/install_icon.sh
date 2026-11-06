@@ -15,7 +15,20 @@ if [ ! -d "$ASSET" ]; then
   exit 0
 fi
 
-if command -v rsvg-convert >/dev/null 2>&1; then
+if [ -f "$LITVIN_ROOT/branding/icon.png" ]; then
+  # A raster icon (branding/icon.png, 1024x1024) wins over the SVG.
+  SRC="$LITVIN_ROOT/branding/icon.png"
+  if command -v sips >/dev/null 2>&1; then
+    RENDER() { sips -s format png -z "$2" "$2" "$1" --out "$3" >/dev/null; }
+  elif command -v magick >/dev/null 2>&1; then
+    RENDER() { magick "$1" -resize "${2}x${2}" "$3"; }
+  elif command -v convert >/dev/null 2>&1; then
+    RENDER() { convert "$1" -resize "${2}x${2}" "$3"; }
+  else
+    echo "install_icon: need sips or ImageMagick" >&2
+    exit 1
+  fi
+elif command -v rsvg-convert >/dev/null 2>&1; then
   RENDER() { rsvg-convert -w "$2" -h "$2" "$1" -o "$3"; }
 elif command -v magick >/dev/null 2>&1; then
   RENDER() { magick -background none -density 1024 "$1" -resize "${2}x${2}" "$3"; }
