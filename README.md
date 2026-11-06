@@ -110,26 +110,22 @@ bash ../scripts/apply_overlay.sh
 bash ../scripts/apply_patches.sh
 python3 ../scripts/build_config.py \
     ../overlay/litvin-configuration.json build-system/litvin-configuration.json
-# Produce an unsigned IPA for AltStore / SideStore to sign at installation.
-cat >> .bazelrc <<'EOF'
-
-build --//Telegram:disableProvisioningProfiles
-build --features=disable_legacy_signing
-EOF
+# Prepare upstream's test signing assets for a sideloadable build.
+python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+python3 ../scripts/refresh_fake_profiles.py "$PWD"
 python3 build-system/Make/Make.py build \
     --configurationPath=build-system/litvin-configuration.json \
-    --xcodeManagedCodesigning \
+    --codesigningInformationPath=build-system/fake-codesigning \
     --buildNumber=1 \
     --configuration=release_arm64
 ```
 
 Export `LITVIN_API_ID` and `LITVIN_API_HASH` before running `build_config.py`.
 The IPA is written to `tg-ios/bazel-bin/Telegram/Telegram.ipa`. CI uploads it as
-`Litvin.ipa`. The unsigned build disables both provisioning profiles and signing;
-it does not depend on Telegram's expiring fake profiles or certificates.
-`--xcodeManagedCodesigning` supplies Make.py's configuration source; the Bazel
-settings above disable actual signing. For a signed distribution build, use your
-own signing configuration and omit these two Bazel settings.
+`Litvin.ipa`. The build uses Telegram's self-signed test identity and refreshes
+expired test profiles before Bazel validates them. This does not create a valid
+Apple distribution signature: AltStore / SideStore must re-sign the IPA for your
+device. For a distribution build, supply your own valid Apple signing assets.
 
 ## License
 

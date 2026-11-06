@@ -70,18 +70,13 @@ jobs:
             "$GITHUB_WORKSPACE/litvin/overlay/litvin-configuration.json" \
             /Users/Shared/telegram-ios/build-system/litvin-configuration.json
 
-      - name: Configure unsigned build
+      - name: Prepare test signing profiles
         working-directory: /Users/Shared/telegram-ios
         run: |
-          # The bundled fake profiles expire. Sideloading tools sign the IPA later,
-          # so neither provisioning profiles nor build-time signing are needed.
-          cat >> .bazelrc <<'EOF'
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          python3 "$GITHUB_WORKSPACE/litvin/scripts/refresh_fake_profiles.py" "$PWD"
 
-          build --//Telegram:disableProvisioningProfiles
-          build --features=disable_legacy_signing
-          EOF
-
-      - name: Build unsigned IPA
+      - name: Build sideloadable IPA
         working-directory: /Users/Shared/telegram-ios
         env:
           BAZEL_USER_ROOT: /private/var/tmp/_bazel_litvin
@@ -93,7 +88,7 @@ jobs:
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
             --configurationPath=build-system/litvin-configuration.json \
-            --xcodeManagedCodesigning \
+            --codesigningInformationPath=build-system/fake-codesigning \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
