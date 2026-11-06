@@ -1,0 +1,28 @@
+name: Validate Litvin features
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Python helpers
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Verify pinned upstream integration
+        run: python3 scripts/verify_integration.py
+      - name: Typecheck core against iOS SDK
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          xcrun swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios15.0 features/LitvinCore/Sources/*.swift
+      - name: Parse all Swift additions
+        run: |
+          find features overlay -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
+      - name: Test core behavior on macOS
+        run: |
+          xcrun swiftc features/LitvinCore/Sources/*.swift scripts/tests/CoreTests.swift -o "$RUNNER_TEMP/litvin-core-tests"
+          "$RUNNER_TEMP/litvin-core-tests"
