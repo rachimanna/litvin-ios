@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0] — 2026-11-06
+- Deleted messages: when the other side deletes a message it stays in the chat, rendered at 70% opacity with an "удалено" label next to the time. Toggle: Litvin → Удалённые сообщения.
+- Protected chats/channels: copy, forward (sent as a copy), save media and screenshots/screen recording are allowed; screenshot notifications are not sent. Toggle: Litvin → Обход запрета копирования.
+- View-once photos/videos/round videos/voice: can be opened any number of times; never marked as viewed, no countdown. Toggle: Litvin → Одноразовые медиа без лимита.
+- All three are on by default. Wired via `scripts/litvin_patch.py` + `overlay/submodules/TelegramCore/Sources/Litvin/LitvinCore.swift`.
+
 ## [0.1.0] — 2026-11-06
 - Initial scaffold.
 - Build pipeline (GitHub Actions macOS runner, Bazel, unsigned IPA artifact).

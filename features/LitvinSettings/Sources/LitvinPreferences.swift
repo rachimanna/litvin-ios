@@ -1,6 +1,4 @@
 import Foundation
-import TelegramCore
-import SwiftSignalKit
 
 public struct LitvinPreferences: Codable, Equatable {
     public var ghostMode: Bool
@@ -61,28 +59,5 @@ public struct LitvinPreferences: Codable, Equatable {
         self.contactProfile = contactProfile
         self.proxyPool = proxyPool
         self.localAI = localAI
-    }
-}
-
-public let litvinPreferencesKey: EngineDataBuffer = {
-    let key = EngineDataBuffer(length: 4)
-    key.setInt32(0, value: 100)
-    return key
-}()
-
-public func updateLitvinPreferencesInteractively(
-    accountManager: AccountManager<TelegramAccountManagerTypes>,
-    _ f: @escaping (LitvinPreferences) -> LitvinPreferences
-) -> Signal<Void, NoError> {
-    return accountManager.transaction { transaction -> Void in
-        transaction.updateSharedData(litvinPreferencesKey, { entry in
-            let current: LitvinPreferences
-            if let value = entry?.get(LitvinPreferences.self) {
-                current = value
-            } else {
-                current = LitvinPreferences.defaultSettings
-            }
-            return SharedPreferencesEntry(f(current))
-        })
     }
 }
