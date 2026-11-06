@@ -14,7 +14,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 360
 
     steps:
@@ -24,7 +24,10 @@ jobs:
           path: litvin
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+        run: |
+          ls /Applications | grep -i "^Xcode" || true
+          sudo xcode-select -p
+          # Use whatever Xcode the runner provides; don't pin — macos-latest changes.
 
       - name: Install Bazelisk
         run: brew install bazelisk
