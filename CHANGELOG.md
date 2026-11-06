@@ -1,7 +1,7 @@
 # Changelog
 
 ## [1.3.0] — 2026-11-07
-- Based on Telegram-iOS 13.1.2 (was 13.0.0), built on GitHub's xcode-27 runner (macOS 27, Xcode 27). 13.2 is not buildable from public sources yet: its tgcalls submodule commit is not published.
+- Stays on Telegram-iOS 13.0.0 (build #24). A move to 13.1.2 on GitHub's xcode-27 runner was tried (builds #25, #26) and postponed; the 13.1 compatibility fixes (edit-history hook, Postbox lint allow-list, stub modules excluded) are kept. 13.2 is not buildable from public sources: its tgcalls submodule commit is not published.
 - Edit history patch supports the new mergedServerMessageUpdate path of 13.1+.
 
 ## [1.2.0] — 2026-11-07

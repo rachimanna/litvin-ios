@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.3.0"
+public let litvinVersion = "1.2.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void

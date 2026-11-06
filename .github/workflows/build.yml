@@ -14,8 +14,8 @@ on:
 
 jobs:
   build:
-    # Telegram 13.1+ needs Xcode 27.1 / macOS 27: GitHub's xcode-27 runner image.
-    runs-on: xcode-27
+    # Telegram 13.0.0 builds with Xcode 26.6 on macos-latest. For 13.1+ use runs-on: xcode-27.
+    runs-on: macos-latest
     timeout-minutes: 360
 
     steps:
