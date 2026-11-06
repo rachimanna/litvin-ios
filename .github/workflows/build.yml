@@ -76,6 +76,15 @@ jobs:
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 "$GITHUB_WORKSPACE/litvin/scripts/refresh_fake_profiles.py" "$PWD"
 
+      - name: Restore Bazel cache
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: /Users/Shared/litvin-bazel-cache
+          key: litvin-bazel-${{ steps.ref.outputs.ref }}-${{ github.run_id }}
+          restore-keys: |
+            litvin-bazel-${{ steps.ref.outputs.ref }}-
+
       - name: Build sideloadable IPA
         working-directory: /Users/Shared/telegram-ios
         env:
@@ -86,11 +95,21 @@ jobs:
           BUILD_NUMBER=$(( BUILD_NUMBER + BUILD_OFFSET ))
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
+            --cacheDir=/Users/Shared/litvin-bazel-cache \
             build \
             --configurationPath=build-system/litvin-configuration.json \
             --codesigningInformationPath=build-system/fake-codesigning \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
+
+      - name: Save Bazel cache
+        # Saved even when the build fails, so the next run only recompiles what changed.
+        if: always()
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: /Users/Shared/litvin-bazel-cache
+          key: litvin-bazel-${{ steps.ref.outputs.ref }}-${{ github.run_id }}
 
       - name: Collect IPA + dSYM
         working-directory: /Users/Shared/telegram-ios

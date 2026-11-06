@@ -407,7 +407,7 @@ public func litvinShouldPlayConfetti(_ messages: [EnqueueMessage]) -> Bool {
 public func litvinForceReadHistory(account: Account, peerId: PeerId) -> Signal<Never, NoError> {
     let postbox = account.postbox
     let network = account.network
-    let stateManager = account.stateManager
+    let stateManager: AccountStateManager = account.stateManager
     return postbox.transaction { transaction -> (Api.InputPeer?, Int32?) in
         let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer)
         let topId = transaction.getTopPeerMessageId(peerId: peerId, namespace: Namespaces.Message.Cloud)
