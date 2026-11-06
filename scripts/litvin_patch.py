@@ -827,6 +827,40 @@ def patch_theme_presets(text, label):
     return text
 
 
+# ---------------------------------------------------------------------------
+# Telegram 13.1+ lint: new Swift files may not use Postbox unless allow-listed.
+# ---------------------------------------------------------------------------
+
+LITVIN_POSTBOX_USERS = [
+    "submodules/LitvinFeatures/LitvinSettings/Sources/LitvinChatStatsController.swift",
+]
+
+
+def allow_postbox(root):
+    for list_name in ("AllowedImporters.txt", "AllowedPostboxAccess.txt"):
+        path = root / "submodules/Postbox" / list_name
+        if not path.is_file():
+            continue
+        lines = path.read_text(encoding="utf-8").splitlines()
+        entries = [l for l in lines if l.strip() and not l.lstrip().startswith("#")]
+        changed = False
+        for entry in LITVIN_POSTBOX_USERS:
+            if entry in entries or not (root / entry).is_file():
+                continue
+            entries.append(entry)
+            changed = True
+        if not changed:
+            continue
+        entries = sorted(set(entries))
+        header = []
+        for l in lines:
+            if l.strip() and not l.lstrip().startswith("#"):
+                break
+            header.append(l)
+        path.write_text("\n".join(header + entries) + "\n", encoding="utf-8")
+        print(f"[litvin_patch] allow-listed Litvin Postbox users in {list_name}")
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -834,6 +868,7 @@ def main():
     edit(root, f"{PEERINFO}/BUILD", patch_build)
     edit(root, "Telegram/BUILD", patch_app_display_name)
     install_icon_composer(root)
+    allow_postbox(root)
     install_alt_icons(root)
     edit(root, "submodules/TelegramUI/Sources/AppDelegate.swift", patch_icon_list)
     edit(root, "submodules/SettingsUI/Sources/Themes/ThemeSettingsAppIconItem.swift", patch_icon_names)

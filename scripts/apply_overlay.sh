@@ -38,6 +38,12 @@ LITVIN_SUBMOD="$TG_ROOT/submodules/LitvinFeatures"
 mkdir -p "$LITVIN_SUBMOD"
 for d in "$LITVIN_ROOT"/features/*/; do
   name="$(basename "$d")"
+  # Only modules with a BUILD file are compiled; source-only stubs stay out of
+  # the Telegram tree (Telegram 13.1+ lints every Swift file there).
+  if [ ! -f "$d/BUILD" ]; then
+    echo "Skip feature stub without BUILD: $name"
+    continue
+  fi
   echo "Overlay feature module: $name"
   rm -rf "$LITVIN_SUBMOD/$name"
   mkdir -p "$LITVIN_SUBMOD/$name"
