@@ -78,6 +78,7 @@ def apply(root):
         litvinTimer.start()
 ''', 'presence schedule')
         t = replace(t, '        self.onlineTimer?.invalidate()\n    }\n', '        self.onlineTimer?.invalidate()\n        self.litvinTimer?.invalidate()\n        if let litvinObserver { NotificationCenter.default.removeObserver(litvinObserver) }\n    }\n', 'presence cleanup')
+        t = replace(t, '                strongSelf.updatePresence(true)\n', '                strongSelf.updatePresence(strongSelf.wasOnline)\n', 'scheduled presence expiry')
         return replace(t, '    private func updatePresence(_ isOnline: Bool) {\n', '    private func updatePresence(_ requestedOnline: Bool) {\n        let isOnline = LitvinPolicy.onlineStatus(requested: requestedOnline)\n', 'presence policy')
     patch(root, f'{CORE}/Sources/State/ManagedAccountPresence.swift', presence)
 
@@ -99,6 +100,18 @@ def apply(root):
                 _internal_deleteMessages''', 'peer deletions')
         return replace(t, '                transaction.updateMessage(id, update: { previousMessage in\n                    var updatedFlags = message.flags', '                transaction.updateMessage(id, update: { previousMessage in\n                    litvinCaptureMessage(accountPeerId: accountPeerId, message: previousMessage, beforeEdit: true)\n                    litvinCaptureStoreMessage(accountPeerId: accountPeerId, transaction: transaction, message: message)\n                    var updatedFlags = message.flags', 'edit history')
     patch(root, f'{CORE}/Sources/State/AccountStateManagementUtils.swift', state)
+    patch(root, f'{CORE}/Sources/State/AccountStateManagementUtils.swift', lambda t: replace(t,
+        '            case let .MergePeerPresences(statuses, explicit):\n', '''            case let .MergePeerPresences(statuses, explicit):
+                if LitvinPolicy.options.contactProfile {
+                    for (peerId, update) in statuses where peerId != accountPeerId {
+                        switch update.status {
+                        case .userStatusOnline: LitvinArchive.forAccount(accountPeerId.toInt64()).observePresence(peer: peerId.toInt64(), online: true)
+                        case .userStatusOffline: LitvinArchive.forAccount(accountPeerId.toInt64()).observePresence(peer: peerId.toInt64(), online: false)
+                        default: break
+                        }
+                    }
+                }
+''', 'observed presence history'))
 
     def consume(t):
         t = imported(t)
@@ -167,6 +180,27 @@ def apply(root):
         if isSharedMediaPolls''', 'message tools')
         return t
     patch(root, f'{UI}/Sources/ChatInterfaceStateContextMenus.swift', menus)
+    patch(root, f'{UI}/Sources/ChatInterfaceStateContextMenus.swift', lambda t: t if 'text: "Litvin: экспорт без метаданных"' in t else replace(t,
+        '        // Litvin: message tools\n', '''        // Litvin: message tools
+        if message.id.namespace == Namespaces.Message.Cloud && message.media.contains(where: { $0 is TelegramMediaImage || $0 is TelegramMediaFile }) {
+            actions.append(.action(ContextMenuActionItem(text: "Litvin: экспорт без метаданных", icon: { _ in nil }, action: { _, done in
+                done(.default)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { LitvinTools.exportCleanMedia(context: context, message: EngineMessage(message)) }
+            })))
+        }
+''', 'media scrub entry'))
+    patch(root, f'{UI}/Sources/ChatInterfaceStateContextMenus.swift', lambda t: t if 'text: "Litvin: скрыть / показать этот чат"' in t else replace(t,
+        '        // Litvin: message tools\n', '''        // Litvin: message tools
+        if message.id.namespace == Namespaces.Message.Cloud {
+            actions.append(.action(ContextMenuActionItem(text: "Litvin: скрыть / показать этот чат", icon: { _ in nil }, action: { _, done in
+                done(.default)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { LitvinTools.toggleHiddenChat(account: context.account.peerId.toInt64(), peer: message.id.peerId.toInt64()) }
+            })))
+        }
+''', 'hide this chat entry'))
+    patch(root, f'{UI}/Sources/ChatController.swift', lambda t: replace(imported(t, 'LitvinSettings'),
+        '    override public func viewWillAppear(_ animated: Bool) {\n        super.viewWillAppear(animated)\n',
+        '    override public func viewWillAppear(_ animated: Bool) {\n        super.viewWillAppear(animated)\n        if let peerId = self.chatLocation.peerId { LitvinTools.protectChatView(account: self.context.account.peerId.toInt64(), peer: peerId.toInt64(), view: self.view) }\n', 'hidden chat cover'))
 
     def gifts(t):
         t = imported(t, 'LitvinSettings')
@@ -227,6 +261,49 @@ def apply(root):
         return replace(t, '    deinit {\n        self.chatListDisposable.dispose()', '    deinit {\n        if let litvinObserver { NotificationCenter.default.removeObserver(litvinObserver) }\n        self.chatListDisposable.dispose()', 'chat list cleanup')
     patch(root, 'submodules/ChatListUI/Sources/Node/ChatListNode.swift', hidden_node)
     patch(root, 'submodules/ChatListUI/BUILD', ui_build)
+
+    def message_search(t):
+        t = imported(t)
+        return replace(t, '            return _internal_searchMessages(account: self.account, location: location, query: query, state: state, centerId: centerId, limit: limit)\n', '''            let litvinAccount = self.account.peerId.toInt64()
+            return _internal_searchMessages(account: self.account, location: location, query: query, state: state, centerId: centerId, limit: limit)
+            |> map { result, state in
+                let messages = result.messages.filter { !LitvinProtection.shouldHide(account: litvinAccount, peer: $0.id.peerId.toInt64()) }
+                let count = messages.count == result.messages.count ? result.totalCount : max(Int32(messages.count), result.totalCount - Int32(result.messages.count - messages.count))
+                let filtered = SearchMessagesResult(messages: messages, readStates: result.readStates, threadInfo: result.threadInfo, totalCount: count, completed: result.completed)
+                return (filtered, state)
+            }
+''', 'hidden message search')
+    patch(root, f'{CORE}/Sources/TelegramEngine/Messages/TelegramEngineMessages.swift', message_search)
+
+    def peer_search(t):
+        t = imported(t)
+        t = replace(t, '            return _internal_searchPeers(accountPeerId: self.account.peerId, postbox: self.account.postbox, network: self.account.network, query: query, scope: scope)\n', '''            let litvinAccount = self.account.peerId.toInt64()
+            return _internal_searchPeers(accountPeerId: self.account.peerId, postbox: self.account.postbox, network: self.account.network, query: query, scope: scope)
+            |> map { first, second in
+                return (first.filter { !LitvinProtection.shouldHide(account: litvinAccount, peer: $0.peer.id.toInt64()) }, second.filter { !LitvinProtection.shouldHide(account: litvinAccount, peer: $0.peer.id.toInt64()) })
+            }
+''', 'hidden remote peers')
+        return replace(t, '            return self.account.postbox.searchPeers(query: query, predicate: predicate)\n            |> map { peers in\n', '''            let litvinAccount = self.account.peerId.toInt64()
+            return self.account.postbox.searchPeers(query: query, predicate: predicate)
+            |> map { peers in
+                let peers = peers.filter { !LitvinProtection.shouldHide(account: litvinAccount, peer: $0.peerId.toInt64()) }
+''', 'hidden local peers')
+    patch(root, f'{CORE}/Sources/TelegramEngine/Contacts/TelegramEngineContacts.swift', peer_search)
+
+    patch(root, f'{UI}/Sources/ApplicationContext.swift', lambda t: replace(imported(t), '                            if !isMuted {\n', '                            if !isMuted && !LitvinProtection.shouldHide(account: context.account.peerId.toInt64(), peer: firstMessage.id.peerId.toInt64()) {\n', 'hidden in-app notifications'))
+
+    def notification(t):
+        t = imported(t)
+        anchor = '                    #if DEBUG\n                    if let locKey = payloadJson["loc-key"] as? String, locKey == "CONF_CALL_REQUEST" {'
+        return replace(t, anchor, '''                    if let peerId, LitvinProtection.shouldRedactNotification(account: accountPeerId.toInt64(), peer: peerId.toInt64(), group: appGroupName) {
+                        updateCurrentContent(NotificationContent(isLockedMessage: "Новое сообщение"))
+                        completed()
+                        return
+                    }
+
+''' + anchor, 'hidden push previews')
+    patch(root, 'Telegram/NotificationService/Sources/NotificationService.swift', notification)
+    patch(root, 'Telegram/NotificationService/BUILD', ui_build)
 
 
 if __name__ == '__main__':

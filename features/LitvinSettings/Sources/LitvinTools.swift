@@ -11,6 +11,7 @@ final class LitvinRowsController: UITableViewController {
     struct Row {
         let title: String
         let detail: String
+        var color: UIColor? = nil
         let action: () -> Void
     }
     var rows: [Row] = []
@@ -38,6 +39,7 @@ final class LitvinRowsController: UITableViewController {
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         let row = rows[indexPath.row]
         cell.textLabel?.text = row.title
+        cell.textLabel?.textColor = row.color ?? .label
         cell.detailTextLabel?.text = row.detail
         cell.detailTextLabel?.numberOfLines = 3
         cell.accessoryType = .disclosureIndicator
@@ -62,7 +64,7 @@ public enum LitvinTools {
     private static var lifecycleObserver: NSObjectProtocol?
     public static func initialize(context: AccountContext) {
         if lifecycleObserver == nil {
-            lifecycleObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in LitvinProtection.concealAll() }
+            lifecycleObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in LitvinProtection.concealAll() }
         }
         LitvinProxyPool.start(context: context)
     }
@@ -115,6 +117,12 @@ public enum LitvinTools {
 
     static func open(_ key: String, context: AccountContext) {
         let account = context.account.peerId.toInt64()
+        let protected = Set(["deleted", "edits", "notes", "channels", "digest", "contacts", "vault", "backup"])
+        if protected.contains(key), !LitvinProtection.hiddenPeers(account: account).isEmpty,
+           LitvinProtection.hiddenPeers(account: account).contains(where: { LitvinProtection.shouldHide(account: account, peer: $0) }) {
+            authenticate(account: account, completion: { open(key, context: context) })
+            return
+        }
         let store = LitvinArchive.forAccount(account)
         switch key {
         case "schedule": schedule()
@@ -192,7 +200,7 @@ public enum LitvinTools {
         controller.refresh = {
             let state = LitvinArchive.forAccount(account).snapshot()
             return state.notes.sorted { $0.key < $1.key }.map { key, note in
-                .init(title: note.tag.isEmpty ? key : "\(note.tag) • \(key)", detail: note.text, action: {
+                .init(title: note.tag.isEmpty ? key : "\(note.tag) • \(key)", detail: note.text, color: [UIColor.label, .systemRed, .systemOrange, .systemGreen, .systemBlue, .systemPurple][min(5, max(0, note.color))], action: {
                     let parts = key.split(separator: ":")
                     if parts.count == 3, let peer = Int64(parts[0]), let namespace = Int32(parts[1]), let message = Int32(parts[2]) { editNote(account: account, peer: peer, namespace: namespace, message: message) }
                 })
@@ -236,9 +244,13 @@ public enum LitvinTools {
                     } else if !message.outgoing && pendingIncoming == nil { pendingIncoming = message.timestamp }
                 }
                 let median = delays.sorted().dropFirst(delays.count / 2).first
-                let detail = "Отправлено: \(sent), получено: \(messages.count - sent). Медиана твоего ответа: \(median.map { String($0 / 60) + " мин" } ?? "нет данных"). Только локально наблюдавшиеся сообщения."
+                let observed = state.presences.filter { $0.peer == peer }
+                let detail = "Отправлено: \(sent), получено: \(messages.count - sent). Медиана твоего ответа: \(median.map { String($0 / 60) + " мин" } ?? "нет данных"). Наблюдавшихся смен статуса: \(observed.count)."
                 return .init(title: messages.last?.peerTitle ?? String(peer), detail: detail, action: {
-                    records(title: "Хронология общения", account: account, source: { Array(messages.reversed()) })
+                    let timeline = LitvinRowsController(title: "Наблюдаемая хронология")
+                    let events: [(Double, String)] = messages.map { (Double($0.timestamp), ($0.outgoing ? "Ты: " : "Собеседник: ") + $0.text) } + observed.map { ($0.timestamp, $0.online ? "Получен статус онлайн" : "Получен статус офлайн") }
+                    timeline.rows = events.sorted { $0.0 > $1.0 }.prefix(500).map { event in .init(title: date(event.0), detail: event.1, action: { info(date(event.0), event.1) }) }
+                    list(timeline)
                 })
             }
         }
@@ -290,7 +302,37 @@ public enum LitvinTools {
     public static func showMessageHistory(account: Int64, peer: Int64, namespace: Int32, message: Int32) {
         let key = "\(peer):\(namespace):\(message)"
         let store = LitvinArchive.forAccount(account)
-        records(title: "История сообщения", account: account, source: { (store.snapshot().edits[key] ?? []) + [store.snapshot().messages[key]].compactMap { $0 } })
+        let state = store.snapshot()
+        let versions = (state.edits[key] ?? []) + [state.messages[key]].compactMap { $0 }
+        let controller = LitvinRowsController(title: "История сообщения")
+        controller.rows = versions.enumerated().map { index, record in
+            .init(title: "Версия \(index + 1) • \(date(record.capturedAt))", detail: record.text, action: {
+                let diff = index + 1 < versions.count ? "\n\nИзменения к следующей версии:\n" + LitvinTextDiff.describe(before: record.text, after: versions[index + 1].text) : "\n\nПоследняя сохранённая версия."
+                info("Версия \(index + 1)", record.text + diff)
+            })
+        }
+        list(controller)
+    }
+
+    public static func toggleHiddenChat(account: Int64, peer: Int64) {
+        guard LitvinProtection.configured(account: account) else {
+            info("Сначала настрой PIN", "Настройки → Litvin → Скрытые чаты и PIN.")
+            return
+        }
+        authenticate(account: account) {
+            var peers = LitvinProtection.hiddenPeers(account: account)
+            if peers.contains(peer) { peers.remove(peer) } else { peers.insert(peer) }
+            LitvinProtection.setHiddenPeers(account: account, peers: peers)
+            LitvinProtection.conceal(account: account)
+        }
+    }
+
+    public static func protectChatView(account: Int64, peer: Int64, view: UIView) {
+        if view.subviews.contains(where: { $0 is LitvinChatCover }) { return }
+        let cover = LitvinChatCover(account: account, peer: peer)
+        cover.frame = view.bounds
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(cover)
     }
 
     public static func showFakeGift(in view: UIView) {
@@ -313,5 +355,34 @@ public enum LitvinTools {
         picker.popoverPresentationController?.sourceView = view
         picker.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
         present(picker)
+    }
+}
+
+private final class LitvinChatCover: UIView {
+    private let account: Int64
+    private let peer: Int64
+    private var observer: NSObjectProtocol?
+    init(account: Int64, peer: Int64) {
+        self.account = account
+        self.peer = peer
+        super.init(frame: .zero)
+        backgroundColor = .systemBackground
+        let button = UIButton(type: .system)
+        button.setTitle("Разблокировать скрытый чат", for: .normal)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            LitvinTools.authenticate(account: self.account, completion: {})
+        }, for: .touchUpInside)
+        addSubview(button)
+        NSLayoutConstraint.activate([button.centerXAnchor.constraint(equalTo: centerXAnchor), button.centerYAnchor.constraint(equalTo: centerYAnchor)])
+        observer = NotificationCenter.default.addObserver(forName: LitvinPolicy.changed, object: nil, queue: .main) { [weak self] _ in self?.refresh() }
+        refresh()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    private func refresh() {
+        isHidden = !LitvinProtection.shouldHide(account: account, peer: peer)
+        if !isHidden { superview?.bringSubviewToFront(self) }
     }
 }

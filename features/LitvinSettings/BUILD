@@ -9,6 +9,7 @@ swift_library(
     copts = [],
     deps = [
         "//submodules/LitvinFeatures/LitvinCore:LitvinCore",
+        "//submodules/Media/ConvertOpusToAAC:ConvertOpusToAAC",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",

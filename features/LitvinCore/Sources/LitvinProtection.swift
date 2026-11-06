@@ -20,8 +20,17 @@ public enum LitvinProtection {
         Set((UserDefaults.standard.array(forKey: "litvin.hidden.\(account)") as? [String] ?? []).compactMap(Int64.init))
     }
     public static func setHiddenPeers(account: Int64, peers: Set<Int64>) {
-        UserDefaults.standard.set(peers.sorted().map(String.init), forKey: "litvin.hidden.\(account)")
+        let values = peers.sorted().map(String.init)
+        let key = "litvin.hidden.\(account)"
+        UserDefaults.standard.set(values, forKey: key)
+        if let bundle = Bundle.main.bundleIdentifier {
+            UserDefaults(suiteName: "group.\(bundle)")?.set(values, forKey: key)
+        }
         notify()
+    }
+    public static func shouldRedactNotification(account: Int64, peer: Int64, group: String) -> Bool {
+        let peers = UserDefaults(suiteName: group)?.array(forKey: "litvin.hidden.\(account)") as? [String] ?? []
+        return peers.contains(String(peer))
     }
     public static func shouldHide(account: Int64, peer: Int64) -> Bool {
         lock.lock()

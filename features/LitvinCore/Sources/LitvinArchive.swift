@@ -144,6 +144,8 @@ public final class LitvinArchive {
 
     public func setNote(key: String, note: LitvinMessageNote?) {
         queue.async {
+            if let note, (note.text.count > 4000 || note.tag.count > 100 || !(0...5).contains(note.color)) { return }
+            if note != nil && self.state.notes[key] == nil && self.state.notes.count >= 5000 { return }
             self.state.notes[key] = note
             self.saveSoon()
         }
@@ -188,6 +190,9 @@ public final class LitvinArchive {
               imported.edits.count <= 5000, imported.presences.count <= 5000 else { throw LitvinArchiveError.invalidBackup }
         guard imported.messages.allSatisfy({ $0.key == $0.value.key && $0.value.account == account }),
               imported.edits.values.allSatisfy({ $0.count <= 50 && $0.allSatisfy { $0.account == account } }) else { throw LitvinArchiveError.invalidBackup }
+        guard imported.messages.values.allSatisfy({ $0.text.count <= 16384 }),
+              imported.edits.values.reduce(0, { $0 + $1.count }) <= 5000,
+              imported.notes.values.allSatisfy({ $0.text.count <= 4000 && $0.tag.count <= 100 && (0...5).contains($0.color) }) else { throw LitvinArchiveError.invalidBackup }
         queue.sync {
             state = imported
             saveSoon()
@@ -211,6 +216,14 @@ public final class LitvinArchive {
         }
         if state.edits.count > 5000 {
             state.edits = Dictionary(uniqueKeysWithValues: state.edits.sorted { $0.key < $1.key }.prefix(5000).map { ($0.key, $0.value) })
+        }
+        var versions = state.edits.values.reduce(0) { $0 + $1.count }
+        if versions > 5000 {
+            let oldest = state.edits.sorted { ($0.value.last?.capturedAt ?? 0) < ($1.value.last?.capturedAt ?? 0) }
+            for (key, records) in oldest where versions > 5000 {
+                state.edits.removeValue(forKey: key)
+                versions -= records.count
+            }
         }
     }
 

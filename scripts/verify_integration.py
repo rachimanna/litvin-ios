@@ -4,7 +4,7 @@ import hashlib
 import importlib.util
 import subprocess
 import tempfile
-import urllib.request
+import sys
 from pathlib import Path
 
 
@@ -34,10 +34,10 @@ def main():
             url = f'https://raw.githubusercontent.com/TelegramMessenger/Telegram-iOS/{ref}/{target}'
             subprocess.run(['curl', '-fsSL', '--retry', '3', url, '-o', str(destination)], check=True)
         for script in ('litvin_patch.py', 'feature_patches.py'):
-            subprocess.run(['python3', str(repository / 'scripts' / script), str(root)], check=True)
+            subprocess.run([sys.executable, str(repository / 'scripts' / script), str(root)], check=True)
         before = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in targets}
         for script in ('litvin_patch.py', 'feature_patches.py'):
-            subprocess.run(['python3', str(repository / 'scripts' / script), str(root)], check=True)
+            subprocess.run([sys.executable, str(repository / 'scripts' / script), str(root)], check=True)
         after = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in targets}
         assert before == after, 'Integration is not idempotent'
         print(f'PASS: all {len(targets)} upstream files patched and reapplication is unchanged')
