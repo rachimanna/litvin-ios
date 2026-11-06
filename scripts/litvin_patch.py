@@ -360,7 +360,8 @@ def patch_privacy_cover(text, label):
     return insert_after(
         text,
         r"^        self\.nativeWindow = window\n",
-        "        LitvinPrivacyCover.shared.install(window: window)\n",
+        "        LitvinPrivacyCover.shared.install(window: window)\n"
+        "        LitvinTopBadge.shared.install(window: window)\n",
         label,
     )
 

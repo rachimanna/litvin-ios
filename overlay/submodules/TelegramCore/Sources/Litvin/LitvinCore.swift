@@ -9,6 +9,7 @@ public enum LitvinFlags {
     public static let keepDeletedKey = "keepDeleted"
     public static let bypassProtectionKey = "bypassProtection"
     public static let unlimitedViewOnceKey = "unlimitedViewOnce"
+    public static let topBadgeKey = "topBadge"
 
     public static func isEnabled(_ key: String) -> Bool {
         return !UserDefaults.standard.bool(forKey: "litvin.off." + key)
@@ -31,6 +32,11 @@ public enum LitvinFlags {
     // View-once / self-destruct media can be opened any number of times.
     public static var unlimitedViewOnce: Bool {
         return isEnabled(unlimitedViewOnceKey)
+    }
+
+    // "LITVIN" pill under the Dynamic Island, visible on screenshots.
+    public static var topBadge: Bool {
+        return isEnabled(topBadgeKey)
     }
 
     // Ghost mode is OFF by default, so it is stored as "litvin.on.ghostMode".

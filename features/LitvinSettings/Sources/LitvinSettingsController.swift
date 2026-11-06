@@ -38,6 +38,7 @@ private struct LitvinSettingsState: Equatable {
     var keepDeleted: Bool
     var bypassProtection: Bool
     var unlimitedViewOnce: Bool
+    var topBadge: Bool
 
     static func current() -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
@@ -46,7 +47,8 @@ private struct LitvinSettingsState: Equatable {
             voicePreset: voice.isActive ? voice.preset.title : "Выключено",
             keepDeleted: LitvinFlags.keepDeleted,
             bypassProtection: LitvinFlags.bypassProtection,
-            unlimitedViewOnce: LitvinFlags.unlimitedViewOnce
+            unlimitedViewOnce: LitvinFlags.unlimitedViewOnce,
+            topBadge: LitvinFlags.topBadge
         )
     }
 }
@@ -64,6 +66,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     case bypassProtectionInfo(String)
     case unlimitedViewOnce(String, Bool)
     case unlimitedViewOnceInfo(String)
+    case topBadge(String, Bool)
+    case topBadgeInfo(String)
     case aboutHeader(String)
     case version(String, String)
     case source(String, String)
@@ -79,7 +83,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return LitvinSettingsSection.messages.rawValue
         case .privacyHeader, .bypassProtection, .bypassProtectionInfo, .unlimitedViewOnce, .unlimitedViewOnceInfo:
             return LitvinSettingsSection.privacy.rawValue
-        case .aboutHeader, .version, .source, .info:
+        case .topBadge, .topBadgeInfo, .aboutHeader, .version, .source, .info:
             return LitvinSettingsSection.about.rawValue
         }
     }
@@ -98,10 +102,12 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
         case .bypassProtectionInfo: return 5
         case .unlimitedViewOnce: return 6
         case .unlimitedViewOnceInfo: return 7
-        case .aboutHeader: return 8
-        case .version: return 9
-        case .source: return 10
-        case .info: return 11
+        case .topBadge: return 8
+        case .topBadgeInfo: return 9
+        case .aboutHeader: return 10
+        case .version: return 11
+        case .source: return 12
+        case .info: return 13
         }
     }
 
@@ -142,6 +148,12 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return false
         case let .unlimitedViewOnceInfo(a):
             if case let .unlimitedViewOnceInfo(b) = rhs { return a == b }
+            return false
+        case let .topBadge(a1, a2):
+            if case let .topBadge(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
+            return false
+        case let .topBadgeInfo(a):
+            if case let .topBadgeInfo(b) = rhs { return a == b }
             return false
         case let .aboutHeader(a):
             if case let .aboutHeader(b) = rhs { return a == b }
@@ -191,6 +203,12 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             })
         case let .keepDeletedInfo(text), let .bypassProtectionInfo(text), let .unlimitedViewOnceInfo(text), let .info(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .topBadge(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggle(LitvinFlags.topBadgeKey, value)
+            })
+        case let .topBadgeInfo(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .version(title, value):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .source(title, value):
@@ -215,6 +233,8 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
         .bypassProtectionInfo("В каналах и чатах с запретом можно копировать, пересылать, сохранять медиа и делать скриншоты. Пересылка из таких чатов отправляется копией."),
         .unlimitedViewOnce("Одноразовые медиа без лимита", state.unlimitedViewOnce),
         .unlimitedViewOnceInfo("Фото, видео, кружки и голосовые «просмотр один раз» можно открывать сколько угодно — они не исчезают и не отмечаются просмотренными."),
+        .topBadge("Значок Litvin сверху", state.topBadge),
+        .topBadgeInfo("Плашка «LITVIN» под «островком» вверху экрана. На телефоне её закрывает Dynamic Island, а на скриншотах и записи экрана она видна."),
         .aboutHeader("LITVIN"),
         .version("Версия", litvinVersion),
         .source("Исходный код", "GitHub"),
@@ -228,6 +248,7 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
 
     let arguments = LitvinSettingsArguments(toggle: { key, value in
         LitvinFlags.setEnabled(key, value)
+        NotificationCenter.default.post(name: Notification.Name("LitvinFlagsChanged"), object: nil)
         statePromise.set(LitvinSettingsState.current())
     }, toggleGhost: { value in
         LitvinFlags.setGhostMode(value)
