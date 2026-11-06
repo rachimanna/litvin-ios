@@ -1,0 +1,12 @@
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+This project is a fork of Telegram-iOS, which is distributed under
+GPLv2. The Litvin modifications are distributed under the same
+license. The full text of GPLv2 is available at:
+
+    https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+The upstream Telegram-iOS copyright notice continues to apply to the
+code imported from it at build time; Litvin additions are
+Copyright (c) 2026 Litvin Contributors.

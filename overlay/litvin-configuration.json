@@ -1,0 +1,15 @@
+{
+  "bundle_id": "app.litvin.messenger",
+  "api_id": "REPLACE_WITH_YOUR_API_ID",
+  "api_hash": "REPLACE_WITH_YOUR_API_HASH",
+  "team_id": "",
+  "app_center_id": "",
+  "is_internal_build": "false",
+  "is_appstore_build": "false",
+  "appstore_id": "0",
+  "app_specific_url_scheme": "litvin",
+  "premium_iap_product_id": "",
+  "enable_siri": "false",
+  "enable_icloud": "false",
+  "_note": "Get your own api_id and api_hash from https://my.telegram.org — do not use shared / leaked ones. Team ID is only needed for signed builds."
+}

@@ -1,0 +1,11 @@
+tg-ios/
+build/
+*.ipa
+*.xcarchive
+.DS_Store
+.bazel_cache/
+*.pyc
+__pycache__/
+.vscode/
+.idea/
+Payload/
