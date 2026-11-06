@@ -98,7 +98,7 @@ def patch_settings_items(text, label):
     text = insert_after(
         text,
         r"^    for section in SettingsSection\.allCases \{\n\s*items\[section\] = \[\]\n\s*\}\n",
-        "    items[.litvin]!.append(PeerInfoScreenDisclosureItem(id: 0, text: \"Litvin\", icon: PresentationResourcesSettings.proxy, action: {\n"
+        "    items[.litvin]!.append(PeerInfoScreenDisclosureItem(id: 0, text: \"Litvin\", icon: litvinSettingsRowIcon(), action: {\n"
         "        interaction.openSettings(.litvin)\n"
         "    }))\n",
         label,
@@ -740,6 +740,84 @@ def patch_outgoing_plugins(text, label):
     )
 
 
+# ---------------------------------------------------------------------------
+# Appearance: Litvin app icons and the Litvin theme colour.
+# ---------------------------------------------------------------------------
+
+LITVIN_ICONS = [
+    ("BlueIcon", "Классика"),
+    ("BlackIcon", "Белая"),
+    ("New1", "Малиновая"),
+    ("New2", "Неон"),
+    ("BlueClassicIcon", "Золото"),
+    ("BlackClassicIcon", "Океан"),
+    ("BlueFilledIcon", "Изумруд"),
+    ("BlackFilledIcon", "Закат"),
+]
+
+
+def install_alt_icons(root):
+    src = Path(__file__).resolve().parent.parent / "branding" / "alt-icons"
+    dst = root / "Telegram/Telegram-iOS"
+    count = 0
+    for f in src.rglob("*.png"):
+        target = dst / f.relative_to(src)
+        if target.parent.is_dir():
+            target.write_bytes(f.read_bytes())
+            count += 1
+    print(f"[litvin_patch] installed {count} Litvin alternate icon images")
+
+
+def patch_icon_list(text, label):
+    if '"Классика"' in text or "litvinIcons" in text:
+        return text
+    match = re.search(r"                var icons = \[\n[\s\S]*?\n                return icons\n", text)
+    if match is None:
+        raise SystemExit(f"[litvin_patch] alternate icon list not found ({label})")
+    lines = ["                // Litvin: our icons only, none of them is Premium-locked.", "                let litvinIcons: [PresentationAppIcon] = ["]
+    for i, (name, _) in enumerate(LITVIN_ICONS):
+        comma = "," if i < len(LITVIN_ICONS) - 1 else ""
+        lines.append(f'                    PresentationAppIcon(name: "{name}", imageName: "{name}"){comma}')
+    lines.append("                ]")
+    lines.append("                return litvinIcons")
+    return text[:match.start()] + "\n".join(lines) + "\n" + text[match.end():]
+
+
+def patch_icon_names(text, label):
+    mapping = {
+        "Appearance_AppIconDefault\n": "Классика",
+        "Appearance_AppIconDefaultX\n": "Белая",
+        "Appearance_AppIconClassic\n": "Золото",
+        "Appearance_AppIconClassicX\n": "Океан",
+        "Appearance_AppIconFilled\n": "Изумруд",
+        "Appearance_AppIconFilledX\n": "Закат",
+        "Appearance_AppIconNew1\n": "Малиновая",
+        "Appearance_AppIconNew2\n": "Неон",
+    }
+    for key, title in mapping.items():
+        old = f"name = item.strings.{key}"
+        new = f'name = "{title}"\n'
+        if new in text:
+            continue
+        text = replace_once(text, old, new, label)
+    return text
+
+
+LITVIN_PRESETS = {
+    "dayClassicColorPresets": '    // Litvin\n    PresentationThemeAccentColor(index: 120, baseColor: .preset, accentColor: 0xFFE0163A, bubbleColors: [0xFFFFE1E8, 0xFFEBDDFF], wallpaper: patternWallpaper(data: .variant2, colors: [0xff6b8a, 0xc35ad6, 0x7a5cff, 0xff4f7b], intensity: 50, rotation: nil)),\n\n',
+    "dayColorPresets": '    PresentationThemeAccentColor(index: 120, baseColor: .preset, accentColor: 0xE0163A, bubbleColors: [0xE0163A, 0x6A1A8C], wallpaper: nil),\n',
+    "nightColorPresets": '    PresentationThemeAccentColor(index: 120, baseColor: .preset, accentColor: 0xE0163A, bubbleColors: [0xE0163A, 0x6A1A8C], wallpaper: patternWallpaper(data: .variant2, colors: [0x3a0a1f, 0x4b1683, 0x1a0612, 0x6a1a3c], intensity: -40, rotation: nil)),\n',
+}
+
+
+def patch_theme_presets(text, label):
+    if "index: 120" in text:
+        return text
+    for var, snippet in LITVIN_PRESETS.items():
+        text = insert_after(text, rf"^var {var}: \[PresentationThemeAccentColor\] = \[\n", snippet, label)
+    return text
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -747,6 +825,10 @@ def main():
     edit(root, f"{PEERINFO}/BUILD", patch_build)
     edit(root, "Telegram/BUILD", patch_app_display_name)
     install_icon_composer(root)
+    install_alt_icons(root)
+    edit(root, "submodules/TelegramUI/Sources/AppDelegate.swift", patch_icon_list)
+    edit(root, "submodules/SettingsUI/Sources/Themes/ThemeSettingsAppIconItem.swift", patch_icon_names)
+    edit(root, "submodules/SettingsUI/Sources/Themes/ThemeColorPresets.swift", patch_theme_presets)
     for strings in sorted(root.glob("Telegram/Telegram-iOS/*.lproj/InfoPlist.strings")):
         if "CFBundleDisplayName" in strings.read_text(encoding="utf-8"):
             edit(root, str(strings.relative_to(root)), patch_localized_display_name)

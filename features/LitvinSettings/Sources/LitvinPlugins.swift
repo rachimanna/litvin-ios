@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import JavaScriptCore
 import Display
 import AccountContext
@@ -415,5 +416,35 @@ public func litvinPluginInstallController(context: AccountContext, source: Strin
         ])
     case .unknown:
         return nil
+    }
+}
+
+/// 30x30 icon for the "Litvin" row in Telegram settings: white L on black.
+public func litvinSettingsRowIcon() -> UIImage? {
+    let size = CGSize(width: 30.0, height: 30.0)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { _ in
+        let rect = CGRect(origin: .zero, size: size)
+        UIColor.black.setFill()
+        UIBezierPath(roundedRect: rect, cornerRadius: 7.0).fill()
+        let scale = size.width / 1024.0
+        let shapes: [[CGPoint]] = [
+            [CGPoint(x: 435.3, y: 226.2), CGPoint(x: 602.3, y: 226.2), CGPoint(x: 428.3, y: 648.3), CGPoint(x: 781.5, y: 648.3), CGPoint(x: 722.5, y: 769.2), CGPoint(x: 226.8, y: 769.2)],
+            [CGPoint(x: 631.8, y: 333.9), CGPoint(x: 775.3, y: 333.9), CGPoint(x: 722.7, y: 465.8), CGPoint(x: 580.7, y: 465.8)]
+        ]
+        UIColor.white.setFill()
+        for shape in shapes {
+            let path = UIBezierPath()
+            for (index, point) in shape.enumerated() {
+                let p = CGPoint(x: point.x * scale, y: point.y * scale)
+                if index == 0 {
+                    path.move(to: p)
+                } else {
+                    path.addLine(to: p)
+                }
+            }
+            path.close()
+            path.fill()
+        }
     }
 }

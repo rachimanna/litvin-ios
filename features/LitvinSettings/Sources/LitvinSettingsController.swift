@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.1.0"
+public let litvinVersion = "1.2.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -313,27 +313,27 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
 private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSettingsEntry] {
     return [
-        .ghostMode("Призрачный режим", state.ghostMode),
+        .ghostMode("👻 Призрачный режим", state.ghostMode),
         .ghostInfo("Собеседники не видят, что ты прочитал сообщения, печатаешь, прослушал голосовое или был онлайн. Если ты сам отправишь сообщение, Telegram покажет тебя в сети."),
-        .voiceChanger("Смена голоса", state.voicePreset),
+        .voiceChanger("🎙 Смена голоса", state.voicePreset),
         .voiceInfo("Злой, девушка, мужчина, ребёнок, пиксель, робот, вокал. Включается один раз — и работает в голосовых, звонках и групповых звонках. Можно менять прямо во время звонка."),
         .plugins("🧩 Плагины", state.pluginsCount == 0 ? "Нет" : "\(state.pluginsCount)"),
         .pluginsInfo("Свои команды и автозамены в сообщениях. Нажми на файл плагина в чате — и запусти его в Litvin."),
         .messagesHeader("СООБЩЕНИЯ"),
-        .keepDeleted("Удалённые сообщения", state.keepDeleted),
+        .keepDeleted("🗑 Удалённые сообщения", state.keepDeleted),
         .keepDeletedInfo("Если собеседник удалит сообщение, оно останется в чате, станет немного прозрачным и получит пометку «удалено» рядом со временем."),
         .extrasHeader("ЕЩЁ"),
-        .extraSwitch(0, LitvinFlags.antiAdsKey, "Без рекламы в каналах", state.antiAds),
-        .extraSwitch(1, LitvinFlags.editHistoryKey, "История правок", state.editHistory),
-        .extraSwitch(2, LitvinFlags.localTranscriptionKey, "Голосовые в текст", state.localTranscription),
-        .extraSwitch(3, LitvinFlags.confettiKey, "Конфетти", state.confetti),
+        .extraSwitch(0, LitvinFlags.antiAdsKey, "🚫 Без рекламы в каналах", state.antiAds),
+        .extraSwitch(1, LitvinFlags.editHistoryKey, "✏️ История правок", state.editHistory),
+        .extraSwitch(2, LitvinFlags.localTranscriptionKey, "📝 Голосовые в текст", state.localTranscription),
+        .extraSwitch(3, LitvinFlags.confettiKey, "🎉 Конфетти", state.confetti),
         .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или 🎉. Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
         .autoReplyHeader("АВТООТВЕТ"),
-        .autoReply("Автоответ в личных чатах", state.autoReply),
+        .autoReply("💬 Автоответ в личных чатах", state.autoReply),
         .autoReplyText(state.autoReplyText),
         .autoReplyInfo("Пока включено, каждому, кто напишет в личку, придёт этот текст (не чаще раза в 30 минут одному человеку). Работает, пока Litvin запущен."),
         .privacyHeader("ЗАЩИЩЁННЫЕ ЧАТЫ"),
-        .unlimitedViewOnce("Одноразовые медиа без лимита", state.unlimitedViewOnce),
+        .unlimitedViewOnce("♾ Одноразовые медиа без лимита", state.unlimitedViewOnce),
         .unlimitedViewOnceInfo("Фото, видео, кружки и голосовые «просмотр один раз» можно открывать сколько угодно — они не исчезают и не отмечаются просмотренными."),
         .aboutHeader("LITVIN"),
         .version("Версия", litvinVersion),

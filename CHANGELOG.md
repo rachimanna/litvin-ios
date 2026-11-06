@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.0] — 2026-11-07
+- Appearance → App icon: 8 Litvin icons (Классика, Белая, Малиновая, Неон, Золото, Океан, Изумруд, Закат), none Premium-locked.
+- Appearance → theme colours: Litvin crimson accent with crimson/violet bubbles and a pattern wallpaper, first in Day Classic, Day and Night.
+- The Litvin row in Telegram settings uses the Litvin "L" icon; Litvin menu items got icons.
+
 ## [1.1.0] — 2026-11-06
 - App icon: the Litvin "L" in the iOS 26 Icon Composer bundle (Telegram.icon), black background.
 - New voice engine (features/LitvinVoiceKit, C++ phase vocoder shared by voice messages and calls): pitch and formants change separately, so Девушка/Ребёнок/Мужчина/Злой sound like real voices; loudness kept equal to the original. New voice: Мужчина. Robot is a constant-pitch vocoder buzz.
