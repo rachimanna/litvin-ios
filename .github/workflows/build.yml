@@ -70,12 +70,13 @@ jobs:
             "$GITHUB_WORKSPACE/litvin/overlay/litvin-configuration.json" \
             /Users/Shared/telegram-ios/build-system/litvin-configuration.json
 
-      - name: Import fake-codesigning certs
+      - name: Prepare test signing profiles
         working-directory: /Users/Shared/telegram-ios
         run: |
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          python3 "$GITHUB_WORKSPACE/litvin/scripts/refresh_fake_profiles.py" "$PWD"
 
-      - name: Build unsigned IPA
+      - name: Build sideloadable IPA
         working-directory: /Users/Shared/telegram-ios
         env:
           BAZEL_USER_ROOT: /private/var/tmp/_bazel_litvin
@@ -97,10 +98,11 @@ jobs:
           OUT="$GITHUB_WORKSPACE/build-output"
           rm -rf "$OUT"
           mkdir -p "$OUT/DSYMs"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" "$OUT/Litvin.ipa"
-          done
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+          # bazel-bin follows the active target configuration, unlike a hardcoded
+          # bazel-out directory name (which changes across Bazel versions).
+          cp bazel-bin/Telegram/Telegram.ipa "$OUT/Litvin.ipa"
+          shopt -s nullglob
+          for f in bazel-bin/Telegram/*.dSYM; do
             cp -R "$f" "$OUT/DSYMs/" || true
           done
           (cd "$OUT" && zip -r Litvin.DSYMs.zip DSYMs 1>/dev/null || true)
