@@ -1,34 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Apply every .patch in litvin/patches/ in lexical order against the current directory.
+# Apply Litvin anchor-based edits via scripts/litvin_patch.py. Also applies
+# any raw .patch files in patches/ for ad-hoc fixes.
 # Run from inside tg-ios.
 # Usage: cd tg-ios && bash /path/to/litvin-ios/scripts/apply_patches.sh /path/to/litvin-ios
 
 LITVIN_ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
-PATCH_DIR="$LITVIN_ROOT/patches"
+TG_ROOT="$(pwd)"
 
-if [ ! -d "$PATCH_DIR" ]; then
-  echo "No patches/ directory, skipping."
-  exit 0
+if [ -f "$LITVIN_ROOT/scripts/litvin_patch.py" ]; then
+  python3 "$LITVIN_ROOT/scripts/litvin_patch.py" "$TG_ROOT"
 fi
 
-shopt -s nullglob
-patches=("$PATCH_DIR"/*.patch)
-if [ ${#patches[@]} -eq 0 ]; then
-  echo "No .patch files found, skipping."
-  exit 0
-fi
-
-for p in "${patches[@]}"; do
-  echo "Applying $(basename "$p")..."
-  git apply --ignore-whitespace --whitespace=nowarn --recount --verbose "$p" || {
-    echo "git apply refused $p — falling back to GNU patch -l (whitespace-lenient)..."
-    patch -l -p1 --no-backup-if-mismatch -i "$p" || {
-      echo "Patch failed: $p" >&2
-      exit 1
+if [ -d "$LITVIN_ROOT/patches" ]; then
+  shopt -s nullglob
+  for p in "$LITVIN_ROOT/patches"/*.patch; do
+    echo "Applying $(basename "$p")..."
+    git apply --ignore-whitespace --whitespace=nowarn --recount --verbose "$p" || {
+      echo "git apply refused $p — falling back to GNU patch -l..."
+      patch -l -p1 --no-backup-if-mismatch -i "$p" || {
+        echo "Patch failed: $p" >&2
+        exit 1
+      }
     }
-  }
-done
+  done
+fi
 
-echo "All patches applied."
+echo "All Litvin edits applied."

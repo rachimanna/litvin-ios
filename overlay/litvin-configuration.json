@@ -1,15 +1,15 @@
 {
-  "bundle_id": "app.litvin.messenger",
+  "bundle_id": "ph.telegra.Telegraph",
   "api_id": "REPLACE_WITH_YOUR_API_ID",
   "api_hash": "REPLACE_WITH_YOUR_API_HASH",
-  "team_id": "",
+  "team_id": "C67CF9S4VU",
   "app_center_id": "0",
   "is_internal_build": "true",
   "is_appstore_build": "false",
   "appstore_id": "0",
-  "app_specific_url_scheme": "litvin",
+  "app_specific_url_scheme": "tg",
   "premium_iap_product_id": "",
   "enable_siri": false,
   "enable_icloud": false,
-  "_note": "Template only. CI replaces api_id and api_hash from GitHub Secrets via scripts/build_config.py."
+  "_note": "bundle_id and team_id MUST match the fake-codesigning profiles shipped by Telegram-iOS (ph.telegra.Telegraph + team C67CF9S4VU). CI replaces api_id and api_hash from GitHub Secrets via scripts/build_config.py. The on-device display name ('Litvin') is controlled separately via Localizable.strings replacement, not via bundle_id."
 }

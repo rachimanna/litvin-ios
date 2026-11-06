@@ -1,14 +1,12 @@
 {
-  "_comment": "String replacements applied over Telegram-iOS Localizable.strings during apply_overlay.sh. Order matters: longer keys first to avoid partial-replacement bugs.",
+  "_comment": "Applied to the VALUE side of each Localizable.strings entry only (keys are never touched, so Swift accessors keep compiling). Longer keys come first to avoid partial-overlap collapse of 'Telegram Messenger'.",
   "replacements": [
     { "from": "Telegram Messenger", "to": "Litvin" },
-    { "from": "Telegram", "to": "Litvin" },
-    { "from": "telegram.org", "to": "litvin.app" },
-    { "from": "@telegram", "to": "@litvin" }
+    { "from": "Telegram", "to": "Litvin" }
   ],
   "app_display_name": "Litvin",
-  "bundle_id": "app.litvin.messenger",
-  "url_scheme": "litvin",
+  "bundle_id": "ph.telegra.Telegraph",
+  "url_scheme": "tg",
   "accent_hex_light": "#C8102E",
   "accent_hex_dark": "#E63946"
 }

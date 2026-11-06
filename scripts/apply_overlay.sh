@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Overlay Litvin files onto a cloned Telegram-iOS tree.
-# Must be run FROM INSIDE the tg-ios directory.
+# Run from inside tg-ios.
 # Usage: cd tg-ios && bash /path/to/litvin-ios/scripts/apply_overlay.sh /path/to/litvin-ios
 
 LITVIN_ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -16,10 +16,20 @@ if [ ! -f "$TG_ROOT/WORKSPACE" ] && [ ! -f "$TG_ROOT/MODULE.bazel" ]; then
   exit 1
 fi
 
-# 1. Drop overlay/ onto the tree 1:1
-if [ -d "$LITVIN_ROOT/overlay" ]; then
-  echo "Copying overlay/ onto Telegram-iOS tree..."
-  cp -R "$LITVIN_ROOT/overlay/." "$TG_ROOT/"
+# 1. Overlay directory (raw file overlay)
+if [ -d "$LITVIN_ROOT/overlay" ] && [ "$(ls -A "$LITVIN_ROOT/overlay" 2>/dev/null)" ]; then
+  # Only copy files that are overlays, not the config template (which stays in-repo).
+  for f in "$LITVIN_ROOT/overlay"/*; do
+    base="$(basename "$f")"
+    if [ "$base" = "litvin-configuration.json" ]; then continue; fi
+    if [ -f "$f" ]; then
+      echo "Overlay: $base"
+      cp "$f" "$TG_ROOT/$base"
+    elif [ -d "$f" ]; then
+      echo "Overlay dir: $base"
+      cp -R "$f" "$TG_ROOT/"
+    fi
+  done
 fi
 
 # 2. Copy each features/<Module> as a new submodule under submodules/LitvinFeatures/
@@ -39,15 +49,14 @@ for d in "$LITVIN_ROOT"/features/*/; do
   fi
 done
 
-# 3. Branding: generate app icons from SVG if ImageMagick/rsvg-convert available
-if [ -f "$LITVIN_ROOT/branding/generate_icons.sh" ]; then
-  echo "Generating app icons..."
-  bash "$LITVIN_ROOT/branding/generate_icons.sh" "$LITVIN_ROOT" "$TG_ROOT"
-fi
-
-# 4. String replacements (Telegram → Litvin) across Localizable.strings
+# 3. Display-name string replacement (Telegram → Litvin) across Localizable.strings VALUES only
 if [ -f "$LITVIN_ROOT/scripts/rename_strings.py" ]; then
   python3 "$LITVIN_ROOT/scripts/rename_strings.py" "$LITVIN_ROOT/branding/strings.json" "$TG_ROOT"
+fi
+
+# 4. App icon: rasterize our SVG into the AppIcon asset catalog
+if [ -f "$LITVIN_ROOT/scripts/install_icon.sh" ]; then
+  bash "$LITVIN_ROOT/scripts/install_icon.sh" "$LITVIN_ROOT" "$TG_ROOT"
 fi
 
 echo "Overlay applied."

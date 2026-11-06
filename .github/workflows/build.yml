@@ -23,77 +23,96 @@ jobs:
         with:
           path: litvin
 
-      - name: Select Xcode
+      - name: Resolve upstream ref
+        id: ref
         run: |
-          ls /Applications | grep -i "^Xcode" || true
-          sudo xcode-select -p
-          # Use whatever Xcode the runner provides; don't pin — macos-latest changes.
-
-      - name: Install Bazelisk + librsvg
-        run: |
-          brew install bazelisk || true
-          brew install librsvg || true
+          REF="${{ github.event.inputs.upstream_ref }}"
+          if [ -z "$REF" ]; then REF="$(cat litvin/UPSTREAM_REF | tr -d '\n ')"; fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Upstream: $REF"
 
       - name: Clone Telegram-iOS at pinned ref
         run: |
-          UPSTREAM_REF="${{ github.event.inputs.upstream_ref }}"
-          if [ -z "$UPSTREAM_REF" ]; then
-            UPSTREAM_REF="$(cat litvin/UPSTREAM_REF)"
-          fi
-          echo "Building against Telegram-iOS ref: $UPSTREAM_REF"
-          git clone --recursive https://github.com/TelegramMessenger/Telegram-iOS.git tg-ios
-          cd tg-ios
-          git checkout "$UPSTREAM_REF"
+          set -x
+          mkdir -p /Users/Shared
+          git clone --recursive -j8 https://github.com/TelegramMessenger/Telegram-iOS.git /Users/Shared/telegram-ios
+          cd /Users/Shared/telegram-ios
+          git checkout "${{ steps.ref.outputs.ref }}"
           git submodule update --init --recursive
+
+      - name: Select Xcode from versions.json
+        run: |
+          cd /Users/Shared/telegram-ios
+          XCODE_VERSION=$(python3 -c 'import json,sys;print(json.load(open("versions.json"))["xcode"])')
+          if [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer
+          else
+            echo "Xcode ${XCODE_VERSION} not installed; falling back to active Xcode."
+            ls /Applications | grep -E "^Xcode" || true
+          fi
+          xcodebuild -version
+
+      - name: Install librsvg
+        run: brew install librsvg || true
 
       - name: Apply Litvin overlay + patches
         run: |
-          cd tg-ios
-          bash ../litvin/scripts/apply_overlay.sh ../litvin
-          bash ../litvin/scripts/apply_patches.sh ../litvin
-
-      - name: Generate icons from SVG
-        run: |
-          cd litvin
-          bash branding/generate_icons.sh
+          cd /Users/Shared/telegram-ios
+          bash "$GITHUB_WORKSPACE/litvin/scripts/apply_overlay.sh" "$GITHUB_WORKSPACE/litvin"
+          bash "$GITHUB_WORKSPACE/litvin/scripts/apply_patches.sh" "$GITHUB_WORKSPACE/litvin"
 
       - name: Build config from template + secrets
         env:
           LITVIN_API_ID: ${{ secrets.LITVIN_API_ID }}
           LITVIN_API_HASH: ${{ secrets.LITVIN_API_HASH }}
-          LITVIN_BUNDLE_ID: ${{ vars.LITVIN_BUNDLE_ID }}
-          LITVIN_TEAM_ID: ${{ secrets.LITVIN_TEAM_ID }}
         run: |
-          mkdir -p build
-          python3 litvin/scripts/build_config.py \
-            litvin/overlay/litvin-configuration.json \
-            build/litvin-configuration.json
+          python3 "$GITHUB_WORKSPACE/litvin/scripts/build_config.py" \
+            "$GITHUB_WORKSPACE/litvin/overlay/litvin-configuration.json" \
+            /Users/Shared/telegram-ios/build-system/litvin-configuration.json
+
+      - name: Import fake-codesigning certs
+        working-directory: /Users/Shared/telegram-ios
+        run: |
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
       - name: Build unsigned IPA
-        working-directory: tg-ios
+        working-directory: /Users/Shared/telegram-ios
+        env:
+          BAZEL_USER_ROOT: /private/var/tmp/_bazel_litvin
         run: |
-          python3 build-system/Make/Make.py \
-            --cacheDir="$HOME/telegram-bazel-cache" \
+          BUILD_NUMBER="${{ github.run_number }}"
+          BUILD_OFFSET=$(cat build_number_offset 2>/dev/null || echo 0)
+          BUILD_NUMBER=$(( BUILD_NUMBER + BUILD_OFFSET ))
+          python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
-            --configurationPath=../build/litvin-configuration.json \
-            --buildNumber=${{ github.run_number }} \
-            --configuration=release_arm64
+            --configurationPath=build-system/litvin-configuration.json \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --configuration=release_arm64 \
+            --buildNumber="$BUILD_NUMBER"
 
-      - name: Package IPA
+      - name: Collect IPA + dSYM
+        working-directory: /Users/Shared/telegram-ios
         run: |
-          mkdir -p Payload
-          cp -R tg-ios/bazel-bin/Telegram/Telegram.app Payload/Litvin.app
-          zip -r Litvin-unsigned.ipa Payload
+          OUT="$GITHUB_WORKSPACE/build-output"
+          rm -rf "$OUT"
+          mkdir -p "$OUT/DSYMs"
+          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
+            cp "$f" "$OUT/Litvin.ipa"
+          done
+          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+            cp -R "$f" "$OUT/DSYMs/" || true
+          done
+          (cd "$OUT" && zip -r Litvin.DSYMs.zip DSYMs 1>/dev/null || true)
+          ls -la "$OUT"
 
       - name: Upload IPA artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Litvin-unsigned-${{ github.run_number }}
-          path: Litvin-unsigned.ipa
+          name: Litvin-${{ github.run_number }}
+          path: |
+            build-output/Litvin.ipa
+            build-output/Litvin.DSYMs.zip
+          if-no-files-found: warn
           retention-days: 30
-
-      - name: Attach to release on tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: Litvin-unsigned.ipa
