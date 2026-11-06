@@ -52,13 +52,25 @@ jobs:
           cd litvin
           bash branding/generate_icons.sh
 
+      - name: Build config from template + secrets
+        env:
+          LITVIN_API_ID: ${{ secrets.LITVIN_API_ID }}
+          LITVIN_API_HASH: ${{ secrets.LITVIN_API_HASH }}
+          LITVIN_BUNDLE_ID: ${{ vars.LITVIN_BUNDLE_ID }}
+          LITVIN_TEAM_ID: ${{ secrets.LITVIN_TEAM_ID }}
+        run: |
+          mkdir -p build
+          python3 litvin/scripts/build_config.py \
+            litvin/overlay/litvin-configuration.json \
+            build/litvin-configuration.json
+
       - name: Build unsigned IPA
         working-directory: tg-ios
         run: |
           python3 build-system/Make/Make.py \
             --cacheDir="$HOME/telegram-bazel-cache" \
             build \
-            --configurationPath=../litvin/overlay/litvin-configuration.json \
+            --configurationPath=../build/litvin-configuration.json \
             --buildNumber=${{ github.run_number }} \
             --configuration=release_arm64
 
