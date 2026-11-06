@@ -70,10 +70,16 @@ jobs:
             "$GITHUB_WORKSPACE/litvin/overlay/litvin-configuration.json" \
             /Users/Shared/telegram-ios/build-system/litvin-configuration.json
 
-      - name: Import fake-codesigning certs
+      - name: Configure unsigned build
         working-directory: /Users/Shared/telegram-ios
         run: |
-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          # The bundled fake profiles expire. Sideloading tools sign the IPA later,
+          # so neither provisioning profiles nor build-time signing are needed.
+          cat >> .bazelrc <<'EOF'
+
+          build --//Telegram:disableProvisioningProfiles
+          build --features=disable_legacy_signing
+          EOF
 
       - name: Build unsigned IPA
         working-directory: /Users/Shared/telegram-ios
@@ -87,7 +93,7 @@ jobs:
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
             --configurationPath=build-system/litvin-configuration.json \
-            --codesigningInformationPath=build-system/fake-codesigning \
+            --xcodeManagedCodesigning \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
@@ -97,10 +103,11 @@ jobs:
           OUT="$GITHUB_WORKSPACE/build-output"
           rm -rf "$OUT"
           mkdir -p "$OUT/DSYMs"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" "$OUT/Litvin.ipa"
-          done
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+          # bazel-bin follows the active target configuration, unlike a hardcoded
+          # bazel-out directory name (which changes across Bazel versions).
+          cp bazel-bin/Telegram/Telegram.ipa "$OUT/Litvin.ipa"
+          shopt -s nullglob
+          for f in bazel-bin/Telegram/*.dSYM; do
             cp -R "$f" "$OUT/DSYMs/" || true
           done
           (cd "$OUT" && zip -r Litvin.DSYMs.zip DSYMs 1>/dev/null || true)
