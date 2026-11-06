@@ -1,6 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
+import TelegramApi
 
 // Litvin runtime switches. Stored as "litvin.off.<key>" so every feature is ON
 // by default (missing key == enabled). Read from TelegramCore, TelegramUI and
@@ -10,6 +11,10 @@ public enum LitvinFlags {
     public static let bypassProtectionKey = "bypassProtection"
     public static let unlimitedViewOnceKey = "unlimitedViewOnce"
     public static let topBadgeKey = "topBadge"
+    public static let antiAdsKey = "antiAds"
+    public static let editHistoryKey = "editHistory"
+    public static let confettiKey = "confetti"
+    public static let localTranscriptionKey = "localTranscription"
 
     public static func isEnabled(_ key: String) -> Bool {
         return !UserDefaults.standard.bool(forKey: "litvin.off." + key)
@@ -32,6 +37,50 @@ public enum LitvinFlags {
     // View-once / self-destruct media can be opened any number of times.
     public static var unlimitedViewOnce: Bool {
         return isEnabled(unlimitedViewOnceKey)
+    }
+
+    // No sponsored messages in channels.
+    public static var antiAds: Bool {
+        return isEnabled(antiAdsKey)
+    }
+
+    // Keep previous versions of edited messages.
+    public static var editHistory: Bool {
+        return isEnabled(editHistoryKey)
+    }
+
+    // Confetti on the screen when you send "С днём рождения", "🎉" etc.
+    public static var confetti: Bool {
+        return isEnabled(confettiKey)
+    }
+
+    // Voice / video message -> text on the device, without Premium.
+    public static var localTranscription: Bool {
+        return isEnabled(localTranscriptionKey)
+    }
+
+    // Auto-reply in private chats (off by default).
+    public static let autoReplyKey = "litvin.on.autoReply"
+    public static let autoReplyTextKey = "litvin.autoReply.text"
+    public static let defaultAutoReplyText = "Сейчас не могу ответить, напишу позже."
+
+    public static var autoReply: Bool {
+        return UserDefaults.standard.bool(forKey: autoReplyKey)
+    }
+
+    public static func setAutoReply(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: autoReplyKey)
+    }
+
+    public static var autoReplyText: String {
+        if let text = UserDefaults.standard.string(forKey: autoReplyTextKey), !text.isEmpty {
+            return text
+        }
+        return defaultAutoReplyText
+    }
+
+    public static func setAutoReplyText(_ text: String) {
+        UserDefaults.standard.set(text, forKey: autoReplyTextKey)
     }
 
     // "LITVIN" pill under the Dynamic Island, visible on screenshots.
@@ -242,4 +291,200 @@ func litvinGhostRequest<T, E>(_ request: @autoclosure () -> Signal<T, E>) -> Sig
         return .complete()
     }
     return request()
+}
+
+
+// ---------------------------------------------------------------------------
+// Edit history
+// ---------------------------------------------------------------------------
+
+public struct LitvinEditVersion: Equatable {
+    public let date: Int32
+    public let text: String
+}
+
+public class LitvinEditHistoryMessageAttribute: MessageAttribute {
+    public let versions: [LitvinEditVersion]
+
+    public init(versions: [LitvinEditVersion]) {
+        self.versions = versions
+    }
+
+    required public init(decoder: PostboxDecoder) {
+        let dates = decoder.decodeInt32ArrayForKey("d")
+        let texts = decoder.decodeStringArrayForKey("t")
+        var versions: [LitvinEditVersion] = []
+        for i in 0 ..< min(dates.count, texts.count) {
+            versions.append(LitvinEditVersion(date: dates[i], text: texts[i]))
+        }
+        self.versions = versions
+    }
+
+    public func encode(_ encoder: PostboxEncoder) {
+        encoder.encodeInt32Array(self.versions.map { $0.date }, forKey: "d")
+        encoder.encodeStringArray(self.versions.map { $0.text }, forKey: "t")
+    }
+}
+
+public extension Message {
+    var litvinEditHistory: LitvinEditHistoryMessageAttribute? {
+        return self.attributes.first(where: { $0 is LitvinEditHistoryMessageAttribute }) as? LitvinEditHistoryMessageAttribute
+    }
+}
+
+// Called while applying a remote edit: remembers the previous text and keeps
+// Litvin's local attributes, which the server copy of the message lacks.
+func litvinApplyEditHistory(previous: Message, newText: String, attributes: inout [MessageAttribute]) {
+    if let deleted = previous.attributes.first(where: { $0 is LitvinDeletedMessageAttribute }), !attributes.contains(where: { $0 is LitvinDeletedMessageAttribute }) {
+        attributes.append(deleted)
+    }
+    var versions = previous.litvinEditHistory?.versions ?? []
+    if LitvinFlags.editHistory && previous.text != newText && !previous.text.isEmpty {
+        var date = previous.timestamp
+        if let edited = previous.attributes.first(where: { $0 is EditedMessageAttribute }) as? EditedMessageAttribute {
+            date = edited.date
+        }
+        versions.append(LitvinEditVersion(date: date, text: previous.text))
+        if versions.count > 50 {
+            versions.removeFirst(versions.count - 50)
+        }
+    }
+    attributes.removeAll(where: { $0 is LitvinEditHistoryMessageAttribute })
+    if !versions.isEmpty {
+        attributes.append(LitvinEditHistoryMessageAttribute(versions: versions))
+    }
+}
+
+public func litvinEditHistoryText(_ attribute: LitvinEditHistoryMessageAttribute, current: String) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "ru_RU")
+    formatter.dateFormat = "d MMM, HH:mm"
+    var lines: [String] = []
+    for version in attribute.versions {
+        let date = formatter.string(from: Date(timeIntervalSince1970: Double(version.date)))
+        lines.append("\(date)\n\(version.text)")
+    }
+    lines.append("Сейчас\n\(current)")
+    return lines.joined(separator: "\n\n")
+}
+
+// ---------------------------------------------------------------------------
+// Confetti keywords
+// ---------------------------------------------------------------------------
+
+private let litvinConfettiPhrases: [String] = [
+    "с днём рождения", "с днем рождения", "поздравляю", "поздравляем",
+    "с новым годом", "с праздником", "happy birthday", "congratulations",
+    "🎉", "🥳", "🎊", "🎂"
+]
+
+// Short words only count as separate words ("ура", but not "дура").
+private let litvinConfettiWords: Set<String> = ["ура", "congrats"]
+
+public func litvinShouldPlayConfetti(_ messages: [EnqueueMessage]) -> Bool {
+    if !LitvinFlags.confetti {
+        return false
+    }
+    for message in messages {
+        if case let .message(text, _, _, _, _, _, _, _, _, _) = message {
+            let lowercased = text.lowercased()
+            if litvinConfettiPhrases.contains(where: { lowercased.contains($0) }) {
+                return true
+            }
+            let words = lowercased.components(separatedBy: CharacterSet.letters.inverted)
+            if words.contains(where: { litvinConfettiWords.contains($0) }) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+// ---------------------------------------------------------------------------
+// Ghost mode: "read for the other side" on demand
+// ---------------------------------------------------------------------------
+
+public func litvinForceReadHistory(account: Account, peerId: PeerId) -> Signal<Never, NoError> {
+    let postbox = account.postbox
+    let network = account.network
+    let stateManager = account.stateManager
+    return postbox.transaction { transaction -> (Api.InputPeer?, Int32?) in
+        let inputPeer = transaction.getPeer(peerId).flatMap(apiInputPeer)
+        let topId = transaction.getTopPeerMessageId(peerId: peerId, namespace: Namespaces.Message.Cloud)
+        return (inputPeer, topId?.id)
+    }
+    |> mapToSignal { inputPeer, maxId -> Signal<Never, NoError> in
+        guard let inputPeer, let maxId else {
+            return .complete()
+        }
+        if case let .inputPeerChannel(channelData) = inputPeer {
+            return network.request(Api.functions.channels.readHistory(channel: .inputChannel(.init(channelId: channelData.channelId, accessHash: channelData.accessHash)), maxId: maxId))
+            |> `catch` { _ -> Signal<Api.Bool, NoError> in
+                return .complete()
+            }
+            |> ignoreValues
+        } else {
+            return network.request(Api.functions.messages.readHistory(peer: inputPeer, maxId: maxId))
+            |> map(Optional.init)
+            |> `catch` { _ -> Signal<Api.messages.AffectedMessages?, NoError> in
+                return .single(nil)
+            }
+            |> mapToSignal { result -> Signal<Never, NoError> in
+                if let result {
+                    switch result {
+                    case let .affectedMessages(affectedMessagesData):
+                        stateManager.addUpdateGroups([.updatePts(pts: affectedMessagesData.pts, ptsCount: affectedMessagesData.ptsCount)])
+                    }
+                }
+                return .complete()
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-reply (private chats, while the app is running)
+// ---------------------------------------------------------------------------
+
+func litvinManagedAutoReply(account: Account) -> Signal<Void, NoError> {
+    let accountPeerId = account.peerId
+    var lastReplyByPeer: [PeerId: Double] = [:]
+    let cooldown: Double = 30.0 * 60.0
+    return account.stateManager.notificationMessages
+    |> mapToSignal { [weak account] batches -> Signal<Void, NoError> in
+        guard let account, LitvinFlags.autoReply else {
+            return .complete()
+        }
+        let now = CFAbsoluteTimeGetCurrent()
+        var signals: [Signal<[MessageId?], NoError>] = []
+        for (messages, _, _, _) in batches {
+            for message in messages {
+                let peerId = message.id.peerId
+                if peerId.namespace != Namespaces.Peer.CloudUser || peerId == accountPeerId {
+                    continue
+                }
+                if !message.flags.contains(.Incoming) || message.id.namespace != Namespaces.Message.Cloud {
+                    continue
+                }
+                if message.media.contains(where: { $0 is TelegramMediaAction }) {
+                    continue
+                }
+                if let user = message.peers[peerId] as? TelegramUser, user.botInfo != nil || user.flags.contains(.isSupport) {
+                    continue
+                }
+                if let last = lastReplyByPeer[peerId], now - last < cooldown {
+                    continue
+                }
+                lastReplyByPeer[peerId] = now
+                signals.append(enqueueMessages(account: account, peerId: peerId, messages: [.message(text: LitvinFlags.autoReplyText, attributes: [], inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])]))
+            }
+        }
+        if signals.isEmpty {
+            return .complete()
+        }
+        return combineLatest(signals)
+        |> map { _ -> Void in
+            return Void()
+        }
+    }
 }

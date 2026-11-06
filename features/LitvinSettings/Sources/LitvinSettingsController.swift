@@ -8,17 +8,21 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "0.3.0"
+public let litvinVersion = "1.0.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
     let toggleGhost: (Bool) -> Void
+    let toggleAutoReply: (Bool) -> Void
+    let updateAutoReplyText: (String) -> Void
     let openVoiceChanger: () -> Void
     let openSource: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, openVoiceChanger: @escaping () -> Void, openSource: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openSource: @escaping () -> Void) {
         self.toggle = toggle
         self.toggleGhost = toggleGhost
+        self.toggleAutoReply = toggleAutoReply
+        self.updateAutoReplyText = updateAutoReplyText
         self.openVoiceChanger = openVoiceChanger
         self.openSource = openSource
     }
@@ -28,6 +32,8 @@ private enum LitvinSettingsSection: Int32 {
     case ghost
     case voice
     case messages
+    case extras
+    case autoReply
     case privacy
     case about
 }
@@ -39,6 +45,12 @@ private struct LitvinSettingsState: Equatable {
     var bypassProtection: Bool
     var unlimitedViewOnce: Bool
     var topBadge: Bool
+    var antiAds: Bool
+    var editHistory: Bool
+    var confetti: Bool
+    var localTranscription: Bool
+    var autoReply: Bool
+    var autoReplyText: String
 
     static func current() -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
@@ -48,7 +60,13 @@ private struct LitvinSettingsState: Equatable {
             keepDeleted: LitvinFlags.keepDeleted,
             bypassProtection: LitvinFlags.bypassProtection,
             unlimitedViewOnce: LitvinFlags.unlimitedViewOnce,
-            topBadge: LitvinFlags.topBadge
+            topBadge: LitvinFlags.topBadge,
+            antiAds: LitvinFlags.antiAds,
+            editHistory: LitvinFlags.editHistory,
+            confetti: LitvinFlags.confetti,
+            localTranscription: LitvinFlags.localTranscription,
+            autoReply: LitvinFlags.autoReply,
+            autoReplyText: LitvinFlags.autoReplyText
         )
     }
 }
@@ -61,6 +79,13 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     case messagesHeader(String)
     case keepDeleted(String, Bool)
     case keepDeletedInfo(String)
+    case extrasHeader(String)
+    case extraSwitch(Int32, String, String, Bool)
+    case extrasInfo(String)
+    case autoReplyHeader(String)
+    case autoReply(String, Bool)
+    case autoReplyText(String)
+    case autoReplyInfo(String)
     case privacyHeader(String)
     case bypassProtection(String, Bool)
     case bypassProtectionInfo(String)
@@ -81,6 +106,10 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return LitvinSettingsSection.voice.rawValue
         case .messagesHeader, .keepDeleted, .keepDeletedInfo:
             return LitvinSettingsSection.messages.rawValue
+        case .extrasHeader, .extraSwitch, .extrasInfo:
+            return LitvinSettingsSection.extras.rawValue
+        case .autoReplyHeader, .autoReply, .autoReplyText, .autoReplyInfo:
+            return LitvinSettingsSection.autoReply.rawValue
         case .privacyHeader, .bypassProtection, .bypassProtectionInfo, .unlimitedViewOnce, .unlimitedViewOnceInfo:
             return LitvinSettingsSection.privacy.rawValue
         case .topBadge, .topBadgeInfo, .aboutHeader, .version, .source, .info:
@@ -90,24 +119,31 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
-        case .ghostMode: return -4
-        case .ghostInfo: return -3
-        case .voiceChanger: return -2
-        case .voiceInfo: return -1
-        case .messagesHeader: return 0
-        case .keepDeleted: return 1
-        case .keepDeletedInfo: return 2
-        case .privacyHeader: return 3
-        case .bypassProtection: return 4
-        case .bypassProtectionInfo: return 5
-        case .unlimitedViewOnce: return 6
-        case .unlimitedViewOnceInfo: return 7
-        case .topBadge: return 8
-        case .topBadgeInfo: return 9
-        case .aboutHeader: return 10
-        case .version: return 11
-        case .source: return 12
-        case .info: return 13
+        case .ghostMode: return 0
+        case .ghostInfo: return 1
+        case .voiceChanger: return 2
+        case .voiceInfo: return 3
+        case .messagesHeader: return 10
+        case .keepDeleted: return 11
+        case .keepDeletedInfo: return 12
+        case .extrasHeader: return 20
+        case let .extraSwitch(index, _, _, _): return 21 + index
+        case .extrasInfo: return 39
+        case .autoReplyHeader: return 40
+        case .autoReply: return 41
+        case .autoReplyText: return 42
+        case .autoReplyInfo: return 43
+        case .privacyHeader: return 50
+        case .bypassProtection: return 51
+        case .bypassProtectionInfo: return 52
+        case .unlimitedViewOnce: return 53
+        case .unlimitedViewOnceInfo: return 54
+        case .topBadge: return 60
+        case .topBadgeInfo: return 61
+        case .aboutHeader: return 70
+        case .version: return 71
+        case .source: return 72
+        case .info: return 73
         }
     }
 
@@ -133,6 +169,27 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return false
         case let .keepDeletedInfo(a):
             if case let .keepDeletedInfo(b) = rhs { return a == b }
+            return false
+        case let .extrasHeader(a):
+            if case let .extrasHeader(b) = rhs { return a == b }
+            return false
+        case let .extraSwitch(a1, a2, a3, a4):
+            if case let .extraSwitch(b1, b2, b3, b4) = rhs { return a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4 }
+            return false
+        case let .extrasInfo(a):
+            if case let .extrasInfo(b) = rhs { return a == b }
+            return false
+        case let .autoReplyHeader(a):
+            if case let .autoReplyHeader(b) = rhs { return a == b }
+            return false
+        case let .autoReply(a1, a2):
+            if case let .autoReply(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
+            return false
+        case let .autoReplyText(a):
+            if case let .autoReplyText(b) = rhs { return a == b }
+            return false
+        case let .autoReplyInfo(a):
+            if case let .autoReplyInfo(b) = rhs { return a == b }
             return false
         case let .privacyHeader(a):
             if case let .privacyHeader(b) = rhs { return a == b }
@@ -187,7 +244,21 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             })
         case let .ghostInfo(text), let .voiceInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
-        case let .messagesHeader(text), let .privacyHeader(text), let .aboutHeader(text):
+        case let .extraSwitch(_, key, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggle(key, value)
+            })
+        case let .autoReply(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.toggleAutoReply(value)
+            })
+        case let .autoReplyText(text):
+            return ItemListMultilineInputItem(presentationData: presentationData, text: text, placeholder: LitvinFlags.defaultAutoReplyText, maxLength: ItemListMultilineInputItemTextLimit(value: 300, display: false), sectionId: self.section, style: .blocks, textUpdated: { value in
+                arguments.updateAutoReplyText(value)
+            })
+        case let .extrasInfo(text), let .autoReplyInfo(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .messagesHeader(text), let .privacyHeader(text), let .aboutHeader(text), let .extrasHeader(text), let .autoReplyHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .keepDeleted(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
@@ -228,6 +299,16 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
         .messagesHeader("СООБЩЕНИЯ"),
         .keepDeleted("Удалённые сообщения", state.keepDeleted),
         .keepDeletedInfo("Если собеседник удалит сообщение, оно останется в чате, станет немного прозрачным и получит пометку «удалено» рядом со временем."),
+        .extrasHeader("ЕЩЁ"),
+        .extraSwitch(0, LitvinFlags.antiAdsKey, "Без рекламы в каналах", state.antiAds),
+        .extraSwitch(1, LitvinFlags.editHistoryKey, "История правок", state.editHistory),
+        .extraSwitch(2, LitvinFlags.localTranscriptionKey, "Голосовые в текст", state.localTranscription),
+        .extraSwitch(3, LitvinFlags.confettiKey, "Конфетти", state.confetti),
+        .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или 🎉. Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
+        .autoReplyHeader("АВТООТВЕТ"),
+        .autoReply("Автоответ в личных чатах", state.autoReply),
+        .autoReplyText(state.autoReplyText),
+        .autoReplyInfo("Пока включено, каждому, кто напишет в личку, придёт этот текст (не чаще раза в 30 минут одному человеку). Работает, пока Litvin запущен."),
         .privacyHeader("ЗАЩИЩЁННЫЕ ЧАТЫ"),
         .bypassProtection("Обход запрета копирования", state.bypassProtection),
         .bypassProtectionInfo("В каналах и чатах с запретом можно копировать, пересылать, сохранять медиа и делать скриншоты. Пересылка из таких чатов отправляется копией."),
@@ -253,6 +334,11 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
     }, toggleGhost: { value in
         LitvinFlags.setGhostMode(value)
         statePromise.set(LitvinSettingsState.current())
+    }, toggleAutoReply: { value in
+        LitvinFlags.setAutoReply(value)
+        statePromise.set(LitvinSettingsState.current())
+    }, updateAutoReplyText: { value in
+        LitvinFlags.setAutoReplyText(value)
     }, openVoiceChanger: {
         pushControllerImpl?(litvinVoiceChangerController(context: context))
     }, openSource: {

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.0] — 2026-11-06
+- No ads: sponsored messages in channels are not loaded. Litvin → Без рекламы в каналах.
+- Edit history: previous versions of edited messages are kept; long-press → «История правок (N)».
+- Voice/round messages to text on the device (Telegram's built-in local recognizer), without Premium.
+- Confetti when you send «С днём рождения», «Поздравляю», «Ура», 🎉 and similar.
+- Ghost mode: chat list long-press → «Прочитать для собеседника» sends the read receipt on demand.
+- Chat statistics: chat list long-press → «Статистика переписки» (counts, who writes more, active hours, busiest day, top emoji).
+- Auto-reply in private chats with custom text (once per 30 min per person, while the app runs).
+
 ## [0.3.0] — 2026-11-06
 - Ghost mode (off by default): no read receipts (chats, channels, threads, secret chats), no typing, no "listened" for voice/video notes, no online status. Litvin → Призрачный режим.
 - Voice changer: Злой, Девушка, Ребёнок, Пиксель, Робот, Вокал + sliders for pitch, effect strength, volume and echo. Applies to recorded voice messages, 1:1 calls and group calls (tgcalls capture post-processing; in group calls it runs after Telegram's own level/noise-suppression processor). One switch for everything: voice messages, calls and group calls. Litvin → Смена голоса.

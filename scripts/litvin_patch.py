@@ -125,7 +125,8 @@ def patch_register_deleted_attribute(text, label):
     return insert_after(
         text,
         r"^\s*declareEncodable\(ContentRequiresValidationMessageAttribute\.self[^\n]*\n",
-        "    declareEncodable(LitvinDeletedMessageAttribute.self, f: { LitvinDeletedMessageAttribute(decoder: $0) })\n",
+        "    declareEncodable(LitvinDeletedMessageAttribute.self, f: { LitvinDeletedMessageAttribute(decoder: $0) })\n"
+        "    declareEncodable(LitvinEditHistoryMessageAttribute.self, f: { LitvinEditHistoryMessageAttribute(decoder: $0) })\n",
         label,
     )
 
@@ -549,6 +550,132 @@ def patch_localized_display_name(text, label):
     return re.sub(r'^"CFBundleDisplayName" = "[^"]*";', '"CFBundleDisplayName" = "Litvin";', text, flags=re.MULTILINE)
 
 
+# ---------------------------------------------------------------------------
+# Final update: no ads, edit history, read-for-them, chat stats, confetti,
+# on-device transcription, auto-reply.
+# ---------------------------------------------------------------------------
+
+def patch_anti_ads(text, label):
+    return replace_once(
+        text,
+        "            guard let inputPeer else {\n                return .single((nil, nil, nil, []))\n            }\n            var flags: Int32 = 0\n",
+        "            guard let inputPeer, !LitvinFlags.antiAds else {\n                return .single((nil, nil, nil, []))\n            }\n            var flags: Int32 = 0\n",
+        label,
+    )
+
+
+def patch_edit_history_core(text, label):
+    return insert_after(
+        text,
+        r"case let \.EditMessage\(id, message\):\n[^\n]*\n\s*transaction\.updateMessage\(id, update: \{ previousMessage in\n[^\n]*\n[^\n]*\n\s*var updatedAttributes = message\.attributes\n",
+        "                    litvinApplyEditHistory(previous: previousMessage, newText: message.text, attributes: &updatedAttributes)\n",
+        label,
+    )
+
+
+EDIT_HISTORY_MENU = """        if messages.count == 1, let litvinHistory = messages[0].litvinEditHistory, !litvinHistory.versions.isEmpty {
+            let litvinMessage = messages[0]
+            actions.append(.action(ContextMenuActionItem(text: "История правок (\\(litvinHistory.versions.count))", icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+            }, action: { c, _ in
+                c?.dismiss(completion: {
+                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                    controllerInteraction.presentController(textAlertController(context: context, title: "История правок", text: litvinEditHistoryText(litvinHistory, current: litvinMessage.text), actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
+                })
+            })))
+        }
+
+"""
+
+
+def patch_edit_history_menu(text, label):
+    return replace_once(
+        text,
+        "        if !isPinnedMessages, !isReplyThreadHead, data.canReply {\n",
+        EDIT_HISTORY_MENU + "        if !isPinnedMessages, !isReplyThreadHead, data.canReply {\n",
+        label,
+    )
+
+
+CHAT_LIST_MENU = """                        if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup || peerId.namespace == Namespaces.Peer.CloudChannel {
+                            if LitvinFlags.ghostMode {
+                                items.append(.action(ContextMenuActionItem(text: "Прочитать для собеседника", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Read"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                                    let _ = litvinForceReadHistory(account: context.account, peerId: peerId).startStandalone()
+                                    f(.default)
+                                })))
+                            }
+                            items.append(.action(ContextMenuActionItem(text: "Статистика переписки", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                                f(.default)
+                                chatListController?.push(litvinChatStatsController(context: context, peerId: peerId))
+                            })))
+                        }
+
+"""
+
+
+def patch_chat_list_menu(text, label):
+    text = add_import(text, "LitvinSettings", label)
+    return replace_once(
+        text,
+        "                        if !isCommunity {\n                            if isUnread {\n",
+        CHAT_LIST_MENU + "                        if !isCommunity {\n                            if isUnread {\n",
+        label,
+    )
+
+
+def patch_chat_list_build(text, label):
+    return insert_after(
+        text,
+        r"^\s*deps = \[\n",
+        '        "//submodules/LitvinFeatures/LitvinSettings:LitvinSettings",\n',
+        label,
+    )
+
+
+def patch_confetti(text, label):
+    return insert_after(
+        text,
+        r"    func sendMessages\(_ messages: \[EnqueueMessage\], media: Bool = false, postpone: Bool = false, commit: Bool = false\) \{\n",
+        "        if litvinShouldPlayConfetti(messages) {\n"
+        "            Queue.mainQueue().after(0.25, { [weak self] in\n"
+        "                self?.chatDisplayNode.playConfettiAnimation()\n"
+        "            })\n"
+        "        }\n",
+        label,
+    )
+
+
+def patch_local_transcription(text, label):
+    text = replace_once(
+        text,
+        "                    if arguments.associatedData.isPremium || arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {\n                        displayTranscribe = true\n",
+        "                    if LitvinFlags.localTranscription || arguments.associatedData.isPremium || arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {\n                        displayTranscribe = true\n",
+        label,
+    )
+    text = replace_once(
+        text,
+        "        if transcriptionText == nil && !arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {\n",
+        "        if transcriptionText == nil && !arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost && !LitvinFlags.localTranscription {\n",
+        label,
+    )
+    text = replace_once(
+        text,
+        "                if context.sharedContext.immediateExperimentalUISettings.localTranscription {\n",
+        "                if context.sharedContext.immediateExperimentalUISettings.localTranscription || (LitvinFlags.localTranscription && !arguments.associatedData.isPremium) {\n",
+        label,
+    )
+    return text
+
+
+def patch_auto_reply(text, label):
+    return insert_after(
+        text,
+        r"^        self\.managedOperationsDisposable\.add\(managedCloudChatRemoveMessagesOperations\([^\n]*\n",
+        "        self.managedOperationsDisposable.add(litvinManagedAutoReply(account: self).start())\n",
+        label,
+    )
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
@@ -604,6 +731,15 @@ def main():
         wrap_calls("network.request(Api.functions.channels.readMessageContents(", "litvinGhostRequest", 1),
     ))
     edit(root, f"{state}/ManagedAccountPresence.swift", patch_ghost_presence)
+
+    edit(root, f"{core}/TelegramEngine/Messages/AdMessages.swift", patch_anti_ads)
+    edit(root, f"{state}/AccountStateManagementUtils.swift", patch_edit_history_core)
+    edit(root, "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift", patch_edit_history_menu)
+    edit(root, "submodules/ChatListUI/Sources/ChatContextMenus.swift", patch_chat_list_menu)
+    edit(root, "submodules/ChatListUI/BUILD", patch_chat_list_build)
+    edit(root, "submodules/TelegramUI/Sources/ChatController.swift", patch_confetti)
+    edit(root, "submodules/TelegramUI/Components/Chat/ChatMessageInteractiveFileNode/Sources/ChatMessageInteractiveFileNode.swift", patch_local_transcription)
+    edit(root, f"{core}/Account/Account.swift", patch_auto_reply)
 
     edit(root, "submodules/TelegramUI/Sources/ManagedAudioRecorder.swift", patch_voice_recorder)
     tgcalls = "submodules/TgVoipWebrtc/tgcalls/tgcalls"
