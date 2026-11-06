@@ -103,6 +103,8 @@ public final class LitvinArchive {
 
     public func observe(_ record: LitvinMessageRecord) {
         guard record.account == account else { return }
+        let vault = LitvinPrivateArchive.forAccount(account)
+        if vault.isProtected(record.peer) { vault.observe(record); return }
         let options = LitvinPolicy.options
         guard options.saveDeleted || options.saveEditHistory || options.channelDigest || options.contactProfile else { return }
         queue.async {
@@ -114,7 +116,10 @@ public final class LitvinArchive {
     }
 
     public func beforeEdit(_ record: LitvinMessageRecord) {
-        guard record.account == account, LitvinPolicy.options.saveEditHistory else { return }
+        guard record.account == account else { return }
+        let vault = LitvinPrivateArchive.forAccount(account)
+        if vault.isProtected(record.peer) { vault.observe(record, beforeEdit: true); return }
+        guard LitvinPolicy.options.saveEditHistory else { return }
         queue.async {
             var history = self.state.edits[record.key] ?? []
             if history.last?.text != record.text {
@@ -127,6 +132,7 @@ public final class LitvinArchive {
     }
 
     public func markDeleted(peer: Int64?, namespace: Int32? = nil, ids: [Int32]) {
+        LitvinPrivateArchive.forAccount(account).markDeleted(peer: peer, namespace: namespace, ids: ids)
         guard LitvinPolicy.options.saveDeleted else { return }
         queue.async {
             let ids = Set(ids)
@@ -143,6 +149,10 @@ public final class LitvinArchive {
     }
 
     public func setNote(key: String, note: LitvinMessageNote?) {
+        if let component = key.split(separator: ":").first, let peer = Int64(component), LitvinPrivateArchive.forAccount(account).isProtected(peer) {
+            LitvinPrivateArchive.forAccount(account).note(peer: peer, key: key, value: note)
+            return
+        }
         queue.async {
             if let note, (note.text.count > 4000 || note.tag.count > 100 || !(0...5).contains(note.color)) { return }
             if note != nil && self.state.notes[key] == nil && self.state.notes.count >= 5000 { return }
@@ -204,6 +214,29 @@ public final class LitvinArchive {
             state = LitvinLocalState(account: account)
             pendingSave?.cancel()
             try? FileManager.default.removeItem(at: file)
+        }
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
+    }
+
+    public func moveToPrivateArchive(peer: Int64, passphrase: String) throws {
+        try queue.sync {
+            var selected = LitvinLocalState(account: account)
+            selected.messages = state.messages.filter { $0.value.peer == peer }
+            selected.edits = state.edits.filter { $0.key.hasPrefix("\(peer):") }
+            selected.notes = state.notes.filter { $0.key.hasPrefix("\(peer):") }
+            let vault = LitvinPrivateArchive.forAccount(account)
+            try vault.create(peer: peer, passphrase: passphrase, state: selected)
+            do {
+                var remaining = state
+                remaining.messages = remaining.messages.filter { $0.value.peer != peer }
+                remaining.edits = remaining.edits.filter { !$0.key.hasPrefix("\(peer):") }
+                remaining.notes = remaining.notes.filter { !$0.key.hasPrefix("\(peer):") }
+                try JSONEncoder().encode(remaining).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                state = remaining
+            } catch {
+                try? vault.rollbackNewArchive(peer: peer)
+                throw error
+            }
         }
         DispatchQueue.main.async { NotificationCenter.default.post(name: Self.changed, object: nil) }
     }

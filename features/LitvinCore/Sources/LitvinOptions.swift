@@ -50,8 +50,8 @@ public enum LitvinPolicy {
         lock.lock()
         transform(&cached)
         let data = try? JSONEncoder().encode(cached)
-        lock.unlock()
         if let data { UserDefaults.standard.set(data, forKey: defaultsKey) }
+        lock.unlock()
         DispatchQueue.main.async { NotificationCenter.default.post(name: changed, object: nil) }
     }
 

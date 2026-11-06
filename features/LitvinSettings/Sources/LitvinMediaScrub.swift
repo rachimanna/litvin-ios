@@ -48,7 +48,7 @@ extension LitvinTools {
                     DispatchQueue.global(qos: .userInitiated).async {
                         do {
                             let pcm = try distortVoice(URL(fileURLWithPath: result))
-                            exportAsset(pcm, preset: AVAssetExportPresetAppleM4A, type: .m4a, extension: "m4a", cleanup: [converted, pcm])
+                            exportAsset(pcm, preset: AVAssetExportPresetAppleM4A, type: .m4a, fileExtension: "m4a", cleanup: [converted, pcm])
                         } catch {
                             try? FileManager.default.removeItem(at: converted)
                             DispatchQueue.main.async { failure(error) }
@@ -58,7 +58,7 @@ extension LitvinTools {
             }))
             present(alert)
         } else if file.isVideo {
-            exportAsset(URL(fileURLWithPath: path), preset: AVAssetExportPresetMediumQuality, type: .mp4, extension: "mp4", cleanup: [])
+            exportAsset(URL(fileURLWithPath: path), preset: AVAssetExportPresetMediumQuality, type: .mp4, fileExtension: "mp4", cleanup: [])
         } else {
             info("Этот формат не поддерживается", "Очистка работает для фото, видео и голосовых сообщений. Документы нужно проверять отдельно.")
         }
@@ -104,7 +104,7 @@ extension LitvinTools {
         }
     }
 
-    private static func exportAsset(_ input: URL, preset: String, type: AVFileType, extension suffix: String, cleanup: [URL]) {
+    private static func exportAsset(_ input: URL, preset: String, type: AVFileType, fileExtension suffix: String, cleanup: [URL]) {
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("Litvin-\(UUID().uuidString).\(suffix)")
         guard let export = AVAssetExportSession(asset: AVURLAsset(url: input), presetName: preset) else {
             cleanup.forEach { try? FileManager.default.removeItem(at: $0) }

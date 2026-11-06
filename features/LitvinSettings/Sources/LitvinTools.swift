@@ -17,7 +17,10 @@ final class LitvinRowsController: UITableViewController {
     var rows: [Row] = []
     var refresh: (() -> [Row])?
     var documentHandler: ((URL) -> Void)?
+    var protectedAccount: Int64?
     private var observer: NSObjectProtocol?
+    private var resignObserver: NSObjectProtocol?
+    private var activeObserver: NSObjectProtocol?
 
     init(title: String, rows: [Row] = []) {
         super.init(style: .insetGrouped)
@@ -29,11 +32,25 @@ final class LitvinRowsController: UITableViewController {
         super.viewDidLoad()
         navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(close))
         observer = NotificationCenter.default.addObserver(forName: LitvinArchive.changed, object: nil, queue: .main) { [weak self] _ in self?.reload() }
+        resignObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.tableView.isHidden = true }
+        activeObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            if let account = self.protectedAccount, LitvinProtection.hiddenPeers(account: account).contains(where: { LitvinProtection.shouldHide(account: account, peer: $0) }) {
+                self.close()
+            } else { self.reload(); self.tableView.isHidden = false }
+        }
         reload()
     }
-    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    deinit {
+        for observer in [observer, resignObserver, activeObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
+    }
     func reload() { if let refresh { rows = refresh() }; tableView.reloadData() }
-    @objc private func close() { dismiss(animated: true) }
+    @objc private func close() { dismiss(animated: true, completion: { [weak self] in self?.releaseRows() }) }
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed || navigationController?.isBeingDismissed == true { releaseRows() }
+    }
+    private func releaseRows() { rows = []; refresh = nil; documentHandler = nil }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { rows.count }
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
@@ -60,11 +77,20 @@ extension LitvinRowsController: UIDocumentPickerDelegate {
     }
 }
 
+extension LitvinRowsController: UIAdaptivePresentationControllerDelegate {
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        rows = []; refresh = nil; documentHandler = nil
+    }
+}
+
 public enum LitvinTools {
     private static var lifecycleObserver: NSObjectProtocol?
     public static func initialize(context: AccountContext) {
         if lifecycleObserver == nil {
-            lifecycleObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in LitvinProtection.concealAll() }
+            lifecycleObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { _ in
+                LitvinProtection.concealAll()
+                LitvinPrivateArchive.lockAll()
+            }
         }
         LitvinProxyPool.start(context: context)
     }
@@ -76,9 +102,16 @@ public enum LitvinTools {
         return top
     }
     static func present(_ controller: UIViewController) {
-        topController()?.present(controller, animated: true)
+        guard let top = topController() else { return }
+        if top is UIAlertController || top.isBeingDismissed {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { present(controller) }
+        } else { top.present(controller, animated: true) }
     }
-    static func list(_ controller: LitvinRowsController) { present(UINavigationController(rootViewController: controller)) }
+    static func list(_ controller: LitvinRowsController) {
+        let navigation = UINavigationController(rootViewController: controller)
+        navigation.presentationController?.delegate = controller
+        present(navigation)
+    }
     static func info(_ title: String, _ message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -102,6 +135,13 @@ public enum LitvinTools {
         present(alert)
     }
     static func failure(_ error: Error) {
+        if let error = error as? LitvinArchiveError {
+            switch error {
+            case .tooLarge: info("Архив слишком большой", "Уменьши объём локальной истории. Максимальный размер содержимого резервной копии — 20 МБ.")
+            case .invalidBackup: info("Архив не подходит", "Проверь файл и аккаунт. Повреждённые данные не импортируются.")
+            }
+            return
+        }
         if let error = error as? LitvinProtectionError {
             switch error {
             case .cooldown: info("Подожди минуту", "Слишком много неверных попыток."); return
@@ -133,9 +173,10 @@ public enum LitvinTools {
         case "digest": records(title: "Дайджест", account: account, source: { store.digest() })
         case "contacts": contacts(account: account)
         case "hidden": hidden(account: account)
-        case "vault": LitvinBackup.show(context: context, vault: true)
+        case "vault": LitvinVaultTools.show(context: context)
         case "backup": LitvinBackup.show(context: context, vault: false)
         case "proxies": LitvinProxyPool.show(context: context)
+        case "esign": LitvinDistribution.show()
         default: info("Litvin \(litvinVersion)", "Данные хранятся на этом устройстве отдельно для каждого аккаунта. История начинается после включения записи. ИИ отсутствует.\n\nРасписание онлайн действует, пока приложение запущено. Изменения рекламы и защиты экрана применяются при повторном открытии чата.")
         }
     }
@@ -156,6 +197,7 @@ public enum LitvinTools {
 
     static func records(title: String, account: Int64, source: @escaping () -> [LitvinMessageRecord]) {
         let controller = LitvinRowsController(title: title)
+        controller.protectedAccount = account
         controller.refresh = {
             let messages = source()
             if messages.isEmpty { return [.init(title: "Пока пусто", detail: "Записываются сообщения, доступные клиенту после включения функции.", action: {})] }
@@ -170,8 +212,13 @@ public enum LitvinTools {
 
     public static func editNote(account: Int64, peer: Int64, namespace: Int32, message: Int32) {
         let store = LitvinArchive.forAccount(account)
+        let vault = LitvinPrivateArchive.forAccount(account)
+        if vault.isProtected(peer), vault.snapshot(peer: peer) == nil {
+            LitvinVaultTools.unlock(account: account, peer: peer) { editNote(account: account, peer: peer, namespace: namespace, message: message) }
+            return
+        }
         let key = "\(peer):\(namespace):\(message)"
-        let current = store.snapshot().notes[key]
+        let current = vault.isProtected(peer) ? vault.snapshot(peer: peer)?.notes[key] : store.snapshot().notes[key]
         prompt("Личная заметка", message: "Видна только тебе на этом устройстве. Пустой текст удаляет заметку. Цвет: 0–5; напоминание — через N минут.", fields: [("Текст", current?.text ?? "", false), ("Метка", current?.tag ?? "", false), ("Цвет 0–5", String(current?.color ?? 0), false), ("Напомнить через минут", "", false)]) { values in
             guard values.count == 4 else { return }
             let identifier = "litvin.note.\(account).\(key)"
@@ -197,6 +244,7 @@ public enum LitvinTools {
 
     static func notes(account: Int64) {
         let controller = LitvinRowsController(title: "Мои заметки")
+        controller.protectedAccount = account
         controller.refresh = {
             let state = LitvinArchive.forAccount(account).snapshot()
             return state.notes.sorted { $0.key < $1.key }.map { key, note in
@@ -211,6 +259,7 @@ public enum LitvinTools {
 
     static func channels(account: Int64) {
         let controller = LitvinRowsController(title: "Каналы дайджеста")
+        controller.protectedAccount = account
         let store = LitvinArchive.forAccount(account)
         controller.refresh = {
             let state = store.snapshot()
@@ -229,6 +278,7 @@ public enum LitvinTools {
 
     static func contacts(account: Int64) {
         let controller = LitvinRowsController(title: "Статистика общения")
+        controller.protectedAccount = account
         controller.refresh = {
             let state = LitvinArchive.forAccount(account).snapshot()
             let groups = Dictionary(grouping: state.messages.values.filter { !$0.channel }, by: { $0.peer })
@@ -248,6 +298,7 @@ public enum LitvinTools {
                 let detail = "Отправлено: \(sent), получено: \(messages.count - sent). Медиана твоего ответа: \(median.map { String($0 / 60) + " мин" } ?? "нет данных"). Наблюдавшихся смен статуса: \(observed.count)."
                 return .init(title: messages.last?.peerTitle ?? String(peer), detail: detail, action: {
                     let timeline = LitvinRowsController(title: "Наблюдаемая хронология")
+                    timeline.protectedAccount = account
                     let events: [(Double, String)] = messages.map { (Double($0.timestamp), ($0.outgoing ? "Ты: " : "Собеседник: ") + $0.text) } + observed.map { ($0.timestamp, $0.online ? "Получен статус онлайн" : "Получен статус офлайн") }
                     timeline.rows = events.sorted { $0.0 > $1.0 }.prefix(500).map { event in .init(title: date(event.0), detail: event.1, action: { info(date(event.0), event.1) }) }
                     list(timeline)
@@ -259,6 +310,7 @@ public enum LitvinTools {
 
     static func hidden(account: Int64) {
         let controller = LitvinRowsController(title: "Скрытые чаты")
+        controller.protectedAccount = account
         let store = LitvinArchive.forAccount(account)
         func choosePeers() {
             controller.refresh = {
@@ -302,9 +354,15 @@ public enum LitvinTools {
     public static func showMessageHistory(account: Int64, peer: Int64, namespace: Int32, message: Int32) {
         let key = "\(peer):\(namespace):\(message)"
         let store = LitvinArchive.forAccount(account)
-        let state = store.snapshot()
+        let vault = LitvinPrivateArchive.forAccount(account)
+        if vault.isProtected(peer), vault.snapshot(peer: peer) == nil {
+            LitvinVaultTools.unlock(account: account, peer: peer) { showMessageHistory(account: account, peer: peer, namespace: namespace, message: message) }
+            return
+        }
+        let state = vault.snapshot(peer: peer) ?? store.snapshot()
         let versions = (state.edits[key] ?? []) + [state.messages[key]].compactMap { $0 }
         let controller = LitvinRowsController(title: "История сообщения")
+        controller.protectedAccount = account
         controller.rows = versions.enumerated().map { index, record in
             .init(title: "Версия \(index + 1) • \(date(record.capturedAt))", detail: record.text, action: {
                 let diff = index + 1 < versions.count ? "\n\nИзменения к следующей версии:\n" + LitvinTextDiff.describe(before: record.text, after: versions[index + 1].text) : "\n\nПоследняя сохранённая версия."

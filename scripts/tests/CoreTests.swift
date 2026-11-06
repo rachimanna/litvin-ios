@@ -13,6 +13,8 @@ import Foundation
         precondition(!LitvinPolicy.onlineStatus(requested: true), "Ghost must override alibi")
         precondition(LitvinPolicy.inWindow(start: 0, end: 0))
         precondition(!LitvinPolicy.inWindow(start: -1, end: 100))
+        precondition(LitvinTextDiff.describe(before: "a👩‍💻b", after: "a🌍b").contains("🌍"))
+        precondition(LitvinTextDiff.describe(before: "", after: "hello").contains("hello"))
 
         let plain = Data("private archive fixture".utf8)
         let encrypted = try LitvinVault.seal(plain, account: account, passphrase: "long-enough-passphrase")
@@ -37,8 +39,19 @@ import Foundation
         let export = try store.exportData()
         try store.importData(export)
         precondition(store.snapshot().messages.count == 2)
+        try store.moveToPrivateArchive(peer: direct.peer, passphrase: "vault-specific-password")
+        let vault = LitvinPrivateArchive.forAccount(account)
+        precondition(vault.isProtected(direct.peer))
+        precondition(store.snapshot().messages[direct.key] == nil, "Vault text remained in the ordinary archive")
+        precondition(vault.snapshot(peer: direct.peer)?.messages[direct.key]?.text == direct.text)
+        vault.lockAllPeers()
+        precondition(vault.snapshot(peer: direct.peer) == nil)
+        do { try vault.unlock(peer: direct.peer, passphrase: "wrong-password"); fatalError("Wrong vault password accepted") } catch {}
+        try vault.unlock(peer: direct.peer, passphrase: "vault-specific-password")
+        precondition(vault.snapshot(peer: direct.peer)?.messages[direct.key]?.text == direct.text)
+        try vault.rollbackNewArchive(peer: direct.peer)
         do { try LitvinArchive.forAccount(account + 1).importData(export); fatalError("Cross-account state accepted") } catch {}
         LitvinArchive.forAccount(account + 1).clear()
-        print("PASS: ghost policy, authenticated encryption, account isolation, edit history, global-delete isolation and backup round-trip")
+        print("PASS: ghost policy, authenticated encryption, vault move/lock/unlock, Unicode diff, account isolation, edit history, global-delete isolation and backup round-trip")
     }
 }

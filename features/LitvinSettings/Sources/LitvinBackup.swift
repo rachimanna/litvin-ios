@@ -15,6 +15,7 @@ private struct LitvinBackupFile: Codable {
     let telegram: LitvinAccountContextState
     let theme: PresentationThemeSettings
     let proxies: ProxySettings
+    let vaults: [String: Data]?
 }
 
 enum LitvinBackup {
@@ -34,8 +35,10 @@ enum LitvinBackup {
                     |> take(1)).startStandalone(next: { telegram, settings in
                         DispatchQueue.global(qos: .userInitiated).async {
                             do {
-                                let backup = LitvinBackupFile(version: 1, account: account, options: LitvinPolicy.options, local: try LitvinArchive.forAccount(account).exportData(), telegram: telegram, theme: settings.0, proxies: settings.1)
-                                let encrypted = try LitvinVault.seal(JSONEncoder().encode(backup), account: account, passphrase: values[0])
+                                let backup = LitvinBackupFile(version: 1, account: account, options: LitvinPolicy.options, local: try LitvinArchive.forAccount(account).exportData(), telegram: telegram, theme: settings.0, proxies: settings.1, vaults: try LitvinPrivateArchive.forAccount(account).encryptedFiles())
+                                let content = try JSONEncoder().encode(backup)
+                                guard content.count <= 20 * 1024 * 1024 else { throw LitvinArchiveError.tooLarge }
+                                let encrypted = try LitvinVault.seal(content, account: account, passphrase: values[0])
                                 let url = FileManager.default.temporaryDirectory.appendingPathComponent("Litvin-\(UUID().uuidString).litvin")
                                 try encrypted.write(to: url, options: [.atomic, .completeFileProtection])
                                 DispatchQueue.main.async {
@@ -86,6 +89,7 @@ enum LitvinBackup {
         alert.addAction(UIAlertAction(title: "Восстановить", style: .destructive, handler: { _ in
             do {
                 try LitvinArchive.forAccount(backup.account).importData(backup.local)
+                try LitvinPrivateArchive.forAccount(backup.account).importEncryptedFiles(backup.vaults ?? [:])
                 LitvinPolicy.replace(backup.options)
                 let theme = updatePresentationThemeSettingsInteractively(accountManager: context.sharedContext.accountManager, { _ in backup.theme })
                 let proxies = updateProxySettingsInteractively(accountManager: context.sharedContext.accountManager, { _ in backup.proxies }) |> map { _ -> Void in }

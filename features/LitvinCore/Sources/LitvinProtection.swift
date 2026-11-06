@@ -127,22 +127,39 @@ public enum LitvinVault {
         let salt: Data
         let ciphertext: Data
     }
-    public static func seal(_ data: Data, account: Int64, passphrase: String) throws -> Data {
-        guard passphrase.count >= 12, passphrase.count <= 1024 else { throw LitvinProtectionError.invalidPIN }
-        let salt = try LitvinProtection.random(16)
-        var raw = try LitvinProtection.derive(pin: passphrase, salt: salt)
-        defer { raw.resetBytes(in: 0..<raw.count) }
-        let key = SymmetricKey(data: raw)
-        let box = try AES.GCM.seal(data, using: key, authenticating: Data("Litvin.vault.v1.\(account)".utf8))
-        guard let ciphertext = box.combined else { throw LitvinProtectionError.invalidData }
-        return try JSONEncoder().encode(Envelope(version: 1, account: account, salt: salt, ciphertext: ciphertext))
+    public final class Session {
+        private let account: Int64
+        private let salt: Data
+        fileprivate let key: SymmetricKey
+        fileprivate init(account: Int64, salt: Data, passphrase: String) throws {
+            self.account = account
+            self.salt = salt
+            var raw = try LitvinProtection.derive(pin: passphrase, salt: salt)
+            defer { raw.resetBytes(in: 0..<raw.count) }
+            self.key = SymmetricKey(data: raw)
+        }
+        public func seal(_ data: Data) throws -> Data {
+            let box = try AES.GCM.seal(data, using: key, authenticating: Data("Litvin.vault.v1.\(account)".utf8))
+            guard let ciphertext = box.combined else { throw LitvinProtectionError.invalidData }
+            return try JSONEncoder().encode(Envelope(version: 1, account: account, salt: salt, ciphertext: ciphertext))
+        }
     }
-    public static func open(_ data: Data, account: Int64, passphrase: String) throws -> Data {
+    public static func newSession(account: Int64, passphrase: String) throws -> Session {
+        guard (12...1024).contains(passphrase.count) else { throw LitvinProtectionError.invalidPIN }
+        return try Session(account: account, salt: LitvinProtection.random(16), passphrase: passphrase)
+    }
+    public static func unlockSession(_ data: Data, account: Int64, passphrase: String) throws -> (Session, Data) {
         guard data.count <= 30 * 1024 * 1024, !passphrase.isEmpty, passphrase.count <= 1024 else { throw LitvinProtectionError.invalidData }
         let envelope = try JSONDecoder().decode(Envelope.self, from: data)
         guard envelope.version == 1, envelope.account == account, envelope.ciphertext.count >= 28 else { throw LitvinProtectionError.invalidData }
-        var raw = try LitvinProtection.derive(pin: passphrase, salt: envelope.salt)
-        defer { raw.resetBytes(in: 0..<raw.count) }
-        return try AES.GCM.open(AES.GCM.SealedBox(combined: envelope.ciphertext), using: SymmetricKey(data: raw), authenticating: Data("Litvin.vault.v1.\(account)".utf8))
+        let session = try Session(account: account, salt: envelope.salt, passphrase: passphrase)
+        let plaintext = try AES.GCM.open(AES.GCM.SealedBox(combined: envelope.ciphertext), using: session.key, authenticating: Data("Litvin.vault.v1.\(account)".utf8))
+        return (session, plaintext)
+    }
+    public static func seal(_ data: Data, account: Int64, passphrase: String) throws -> Data {
+        try newSession(account: account, passphrase: passphrase).seal(data)
+    }
+    public static func open(_ data: Data, account: Int64, passphrase: String) throws -> Data {
+        try unlockSession(data, account: account, passphrase: passphrase).1
     }
 }

@@ -92,7 +92,7 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
                 add("Мои заметки", key: "notes", section: section)
             }
             if section == 3 {
-                for row in [("Каналы дайджеста", "channels"), ("Дайджест", "digest"), ("Статистика контактов", "contacts"), ("Скрытые чаты и PIN", "hidden"), ("Шифрованный локальный архив", "vault"), ("Пул прокси", "proxies"), ("Экспорт / импорт", "backup"), ("О Litvin", "about")] {
+                for row in [("Каналы дайджеста", "channels"), ("Дайджест", "digest"), ("Статистика контактов", "contacts"), ("Скрытые чаты и PIN", "hidden"), ("Шифрованный локальный архив", "vault"), ("Пул прокси", "proxies"), ("Экспорт / импорт", "backup"), ("Установка через ESign", "esign"), ("О Litvin", "about")] {
                     add(row.0, key: row.1, section: section)
                 }
             }

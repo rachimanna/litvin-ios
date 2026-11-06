@@ -58,6 +58,31 @@ def apply(root):
         'private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {\n',
         'private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {\n    if LitvinPolicy.suppressReadReceipts { return .single(readState) }\n', 'read receipt gate'))
 
+    patch(root, f'{CORE}/Sources/TelegramEngine/Messages/MarkAllChatsAsRead.swift', lambda t: replace(imported(t),
+        'func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManager: AccountStateManager) -> Signal<Void, NoError> {\n',
+        'func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManager: AccountStateManager) -> Signal<Void, NoError> {\n    if LitvinPolicy.suppressReadReceipts { return .complete() }\n', 'mark-all receipt gate'))
+    patch(root, f'{CORE}/Sources/TelegramEngine/Messages/InstallInteractiveReadMessagesAction.swift', lambda t: replace(imported(t),
+        'func _internal_installInteractiveReadMessagesAction(postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, threadId: Int64?) -> Disposable {\n',
+        'func _internal_installInteractiveReadMessagesAction(postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, threadId: Int64?) -> Disposable {\n    if LitvinPolicy.suppressReadReceipts { return EmptyDisposable }\n', 'mention receipt gate'))
+
+    def forum_receipts(t):
+        t = imported(t)
+        pattern = r'^( +)(let _ = network\.request\(Api\.functions\.messages\.(?:readDiscussion|readSavedHistory)\([^\n]+\.start\(\))$'
+        t = re.sub(pattern, lambda m: m[1] + 'if !LitvinPolicy.suppressReadReceipts { ' + m[2] + ' }', t, flags=re.MULTILINE)
+        if 'if !LitvinPolicy.suppressReadReceipts { let _ = network.request(Api.functions.messages.readDiscussion' not in t:
+            raise RuntimeError('forum receipt anchors not found')
+        return t
+    patch(root, f'{CORE}/Sources/TelegramEngine/Messages/ApplyMaxReadIndexInteractively.swift', forum_receipts)
+    def reply_receipts(t):
+        t = imported(t)
+        old = '                strongSelf.readDisposable.set(signal.start())'
+        new = '                if !LitvinPolicy.suppressReadReceipts { strongSelf.readDisposable.set(signal.start()) }'
+        if new not in t:
+            if t.count(old) != 2: raise RuntimeError('reply thread receipt anchors changed')
+            t = t.replace(old, new)
+        return t
+    patch(root, f'{CORE}/Sources/TelegramEngine/Messages/ReplyThreadHistory.swift', reply_receipts)
+
     def presence(t):
         t = imported(t)
         t = replace(t, '    private var onlineTimer: SignalKitTimer?\n', '    private var onlineTimer: SignalKitTimer?\n    private var litvinTimer: SignalKitTimer?\n    private var litvinObserver: NSObjectProtocol?\n', 'presence fields')

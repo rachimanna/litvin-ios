@@ -2,6 +2,8 @@
 """Check every feature edit against the exact pinned upstream and test reapplication."""
 import hashlib
 import importlib.util
+import os
+import shutil
 import subprocess
 import tempfile
 import sys
@@ -40,6 +42,8 @@ def main():
             subprocess.run([sys.executable, str(repository / 'scripts' / script), str(root)], check=True)
         after = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in targets}
         assert before == after, 'Integration is not idempotent'
+        if output := os.environ.get('LITVIN_VERIFY_EXPORT'):
+            shutil.copytree(root, output, dirs_exist_ok=True)
         print(f'PASS: all {len(targets)} upstream files patched and reapplication is unchanged')
 
 

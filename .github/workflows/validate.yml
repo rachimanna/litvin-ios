@@ -2,8 +2,13 @@ name: Validate Litvin features
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: litvin-validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -14,6 +19,8 @@ jobs:
       - name: Test Python helpers
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Verify pinned upstream integration
+        env:
+          LITVIN_VERIFY_EXPORT: ${{ runner.temp }}/litvin-upstream-fixture
         run: python3 scripts/verify_integration.py
       - name: Typecheck core against iOS SDK
         run: |
@@ -21,7 +28,7 @@ jobs:
           xcrun swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios15.0 features/LitvinCore/Sources/*.swift
       - name: Parse all Swift additions
         run: |
-          find features overlay -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
+          find features overlay "$RUNNER_TEMP/litvin-upstream-fixture" -name '*.swift' -print0 | xargs -0 xcrun swiftc -frontend -parse
       - name: Test core behavior on macOS
         run: |
           xcrun swiftc features/LitvinCore/Sources/*.swift scripts/tests/CoreTests.swift -o "$RUNNER_TEMP/litvin-core-tests"
