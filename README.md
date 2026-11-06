@@ -105,13 +105,31 @@ Open the project in Xcode, set your team, sign, archive, distribute ad-hoc.
 git clone https://github.com/rachimanna/litvin-ios.git
 cd litvin-ios
 bash scripts/setup.sh        # clones Telegram-iOS at pinned tag into ./tg-ios
-bash scripts/apply_overlay.sh
 cd tg-ios
+bash ../scripts/apply_overlay.sh
+bash ../scripts/apply_patches.sh
+python3 ../scripts/build_config.py \
+    ../overlay/litvin-configuration.json build-system/litvin-configuration.json
+# Produce an unsigned IPA for AltStore / SideStore to sign at installation.
+cat >> .bazelrc <<'EOF'
+
+build --//Telegram:disableProvisioningProfiles
+build --features=disable_legacy_signing
+EOF
 python3 build-system/Make/Make.py build \
-    --configurationPath=../overlay/litvin-configuration.json \
+    --configurationPath=build-system/litvin-configuration.json \
+    --xcodeManagedCodesigning \
     --buildNumber=1 \
     --configuration=release_arm64
 ```
+
+Export `LITVIN_API_ID` and `LITVIN_API_HASH` before running `build_config.py`.
+The IPA is written to `tg-ios/bazel-bin/Telegram/Telegram.ipa`. CI uploads it as
+`Litvin.ipa`. The unsigned build disables both provisioning profiles and signing;
+it does not depend on Telegram's expiring fake profiles or certificates.
+`--xcodeManagedCodesigning` supplies Make.py's configuration source; the Bazel
+settings above disable actual signing. For a signed distribution build, use your
+own signing configuration and omit these two Bazel settings.
 
 ## License
 
