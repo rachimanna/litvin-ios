@@ -46,7 +46,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
     var stableId: Int32 {
         switch self {
         case .presetsHeader: return 0
-        case let .preset(preset, _): return 1 + Int32(preset.rawValue)
+        case let .preset(preset, _): return 1 + Int32(LitvinVoiceSettings.Preset.allCases.firstIndex(of: preset) ?? 0)
         case .tuningHeader: return 20
         case .pitch: return 21
         case .strength: return 22
@@ -108,7 +108,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
                 arguments.reset()
             })
         case .tuningInfo:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("Выбранный голос включается сразу везде: в голосовых, звонках и групповых звонках. «Сила эффекта» на 0% — твой обычный голос, на 100% — только эффект. В звонке голос берётся в момент входа."), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("Выбранный голос включается сразу везде: в голосовых, звонках и групповых звонках. «Сила эффекта» на 0% — твой обычный голос, на 100% — только эффект. Голос можно менять прямо во время звонка: сверни звонок, зайди сюда и выбери другой — он включится через полсекунды."), sectionId: self.section)
         }
     }
 }

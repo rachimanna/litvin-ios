@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.0.0"
+public let litvinVersion = "1.1.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -16,14 +16,16 @@ private final class LitvinSettingsArguments {
     let toggleAutoReply: (Bool) -> Void
     let updateAutoReplyText: (String) -> Void
     let openVoiceChanger: () -> Void
+    let openPlugins: () -> Void
     let openSource: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openSource: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openPlugins: @escaping () -> Void, openSource: @escaping () -> Void) {
         self.toggle = toggle
         self.toggleGhost = toggleGhost
         self.toggleAutoReply = toggleAutoReply
         self.updateAutoReplyText = updateAutoReplyText
         self.openVoiceChanger = openVoiceChanger
+        self.openPlugins = openPlugins
         self.openSource = openSource
     }
 }
@@ -31,6 +33,7 @@ private final class LitvinSettingsArguments {
 private enum LitvinSettingsSection: Int32 {
     case ghost
     case voice
+    case plugins
     case messages
     case extras
     case autoReply
@@ -51,6 +54,7 @@ private struct LitvinSettingsState: Equatable {
     var localTranscription: Bool
     var autoReply: Bool
     var autoReplyText: String
+    var pluginsCount: Int
 
     static func current() -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
@@ -66,7 +70,8 @@ private struct LitvinSettingsState: Equatable {
             confetti: LitvinFlags.confetti,
             localTranscription: LitvinFlags.localTranscription,
             autoReply: LitvinFlags.autoReply,
-            autoReplyText: LitvinFlags.autoReplyText
+            autoReplyText: LitvinFlags.autoReplyText,
+            pluginsCount: LitvinPluginManager.shared.allPlugins().count
         )
     }
 }
@@ -76,6 +81,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     case ghostInfo(String)
     case voiceChanger(String, String)
     case voiceInfo(String)
+    case plugins(String, String)
+    case pluginsInfo(String)
     case messagesHeader(String)
     case keepDeleted(String, Bool)
     case keepDeletedInfo(String)
@@ -104,6 +111,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return LitvinSettingsSection.ghost.rawValue
         case .voiceChanger, .voiceInfo:
             return LitvinSettingsSection.voice.rawValue
+        case .plugins, .pluginsInfo:
+            return LitvinSettingsSection.plugins.rawValue
         case .messagesHeader, .keepDeleted, .keepDeletedInfo:
             return LitvinSettingsSection.messages.rawValue
         case .extrasHeader, .extraSwitch, .extrasInfo:
@@ -123,6 +132,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
         case .ghostInfo: return 1
         case .voiceChanger: return 2
         case .voiceInfo: return 3
+        case .plugins: return 5
+        case .pluginsInfo: return 6
         case .messagesHeader: return 10
         case .keepDeleted: return 11
         case .keepDeletedInfo: return 12
@@ -160,6 +171,12 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return false
         case let .voiceInfo(a):
             if case let .voiceInfo(b) = rhs { return a == b }
+            return false
+        case let .plugins(a1, a2):
+            if case let .plugins(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
+            return false
+        case let .pluginsInfo(a):
+            if case let .pluginsInfo(b) = rhs { return a == b }
             return false
         case let .messagesHeader(a):
             if case let .messagesHeader(b) = rhs { return a == b }
@@ -242,7 +259,11 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
                 arguments.openVoiceChanger()
             })
-        case let .ghostInfo(text), let .voiceInfo(text):
+        case let .plugins(title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
+                arguments.openPlugins()
+            })
+        case let .ghostInfo(text), let .voiceInfo(text), let .pluginsInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .extraSwitch(_, key, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
@@ -295,7 +316,9 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
         .ghostMode("Призрачный режим", state.ghostMode),
         .ghostInfo("Собеседники не видят, что ты прочитал сообщения, печатаешь, прослушал голосовое или был онлайн. Если ты сам отправишь сообщение, Telegram покажет тебя в сети."),
         .voiceChanger("Смена голоса", state.voicePreset),
-        .voiceInfo("Злой, девушка, ребёнок, пиксель, робот, вокал. Включается один раз — и работает в голосовых, звонках и групповых звонках."),
+        .voiceInfo("Злой, девушка, мужчина, ребёнок, пиксель, робот, вокал. Включается один раз — и работает в голосовых, звонках и групповых звонках. Можно менять прямо во время звонка."),
+        .plugins("🧩 Плагины", state.pluginsCount == 0 ? "Нет" : "\(state.pluginsCount)"),
+        .pluginsInfo("Свои команды и автозамены в сообщениях. Нажми на файл плагина в чате — и запусти его в Litvin."),
         .messagesHeader("СООБЩЕНИЯ"),
         .keepDeleted("Удалённые сообщения", state.keepDeleted),
         .keepDeletedInfo("Если собеседник удалит сообщение, оно останется в чате, станет немного прозрачным и получит пометку «удалено» рядом со временем."),
@@ -337,6 +360,8 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         LitvinFlags.setAutoReplyText(value)
     }, openVoiceChanger: {
         pushControllerImpl?(litvinVoiceChangerController(context: context))
+    }, openPlugins: {
+        pushControllerImpl?(litvinPluginsController(context: context))
     }, openSource: {
         if let url = URL(string: "https://github.com/rachimanna/litvin-ios") {
             UIApplication.shared.open(url)

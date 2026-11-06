@@ -111,6 +111,7 @@ public struct LitvinVoiceSettings: Equatable {
         case off = 0
         case angry = 1
         case girl = 2
+        case man = 7
         case child = 3
         case pixel = 4
         case robot = 5
@@ -121,6 +122,7 @@ public struct LitvinVoiceSettings: Equatable {
             case .off: return "Выключено"
             case .angry: return "Злой"
             case .girl: return "Девушка"
+            case .man: return "Мужчина"
             case .child: return "Ребёнок"
             case .pixel: return "Пиксель"
             case .robot: return "Робот"
@@ -489,4 +491,38 @@ func litvinManagedAutoReply(account: Account) -> Signal<Void, NoError> {
             return Void()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Plugins: rewrite the text of outgoing messages (nil from `transform` drops a
+// text-only message; a message with media keeps its media and original text).
+// ---------------------------------------------------------------------------
+
+public func litvinMapOutgoingTexts(_ messages: [EnqueueMessage], _ transform: (String) -> String?) -> [EnqueueMessage] {
+    var result: [EnqueueMessage] = []
+    for message in messages {
+        switch message {
+        case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+            if text.isEmpty {
+                result.append(message)
+                continue
+            }
+            guard let updated = transform(text) else {
+                if mediaReference != nil {
+                    result.append(message)
+                }
+                continue
+            }
+            if updated == text {
+                result.append(message)
+                continue
+            }
+            // Entities point into the old text; drop them when the text changes.
+            let updatedAttributes = attributes.filter { !($0 is TextEntitiesMessageAttribute) }
+            result.append(.message(text: updated, attributes: updatedAttributes, inlineStickers: inlineStickers, mediaReference: mediaReference, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets))
+        case .forward:
+            result.append(message)
+        }
+    }
+    return result
 }

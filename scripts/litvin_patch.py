@@ -676,12 +676,77 @@ def patch_auto_reply(text, label):
     )
 
 
+# ---------------------------------------------------------------------------
+# App icon (iOS 26 Icon Composer bundle Telegram/Telegram-iOS/Telegram.icon).
+# The plane layer becomes the Litvin "L", the blue oval a full black square.
+# ---------------------------------------------------------------------------
+
+def install_icon_composer(root):
+    src = Path(__file__).resolve().parent.parent / "branding" / "icon-composer"
+    icon = root / "Telegram/Telegram-iOS/Telegram.icon"
+    if not icon.is_dir() or not src.is_dir():
+        print("[litvin_patch] Telegram.icon or branding/icon-composer missing; icon not replaced")
+        return
+    for name in ("Plane.svg", "Oval.svg"):
+        (icon / "Assets" / name).write_text((src / name).read_text(encoding="utf-8"), encoding="utf-8")
+    js = icon / "icon.json"
+    text = js.read_text(encoding="utf-8")
+    text = re.sub(r'"linear-gradient" : \[[^\]]*\]', '"linear-gradient" : [\n                  "srgb:0.00000,0.00000,0.00000,1.00000",\n                  "srgb:0.06000,0.06000,0.06000,1.00000"\n                ]', text)
+    text = re.sub(r'"automatic-gradient" : "[^"]*"', '"automatic-gradient" : "srgb:0.00000,0.00000,0.00000,1.00000"', text)
+    js.write_text(text, encoding="utf-8")
+    print("[litvin_patch] installed Litvin icon into Telegram.icon")
+
+
+def patch_telegramui_build(text, label):
+    return insert_after(
+        text,
+        r"swift_library\(\n\s*name = \"TelegramUI\",[\s\S]*?^    deps = \[\n",
+        '        "//submodules/LitvinFeatures/LitvinVoiceKit:LitvinVoiceKit",\n'
+        '        "//submodules/LitvinFeatures/LitvinSettings:LitvinSettings",\n',
+        label,
+    )
+
+
+def patch_tgvoip_build(text, label):
+    return insert_after(
+        text,
+        r"objc_library\(\n\s*name = \"TgVoipWebrtc\",[\s\S]*?^    deps = \[\n",
+        '        "//submodules/LitvinFeatures/LitvinVoiceKit:LitvinVoiceDsp",\n',
+        label,
+    )
+
+
+def patch_open_plugin_file(text, label):
+    return insert_after(
+        text,
+        r"^func openChatMessageImpl\(_ params: OpenChatMessageParams\) -> Bool \{\n",
+        "    if litvinOpenPluginFileIfNeeded(params) {\n"
+        "        return true\n"
+        "    }\n",
+        label,
+    )
+
+
+def patch_outgoing_plugins(text, label):
+    text = add_import(text, "LitvinSettings", label)
+    return insert_after(
+        text,
+        r"    func sendMessages\(_ messages: \[EnqueueMessage\], media: Bool = false, postpone: Bool = false, commit: Bool = false\) \{\n",
+        "        let messages = litvinMapOutgoingTexts(messages, { LitvinPluginManager.shared.transformOutgoingText($0) })\n"
+        "        if messages.isEmpty {\n"
+        "            return\n"
+        "        }\n",
+        label,
+    )
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: litvin_patch.py <tg-ios-root>")
     root = Path(sys.argv[1])
     edit(root, f"{PEERINFO}/BUILD", patch_build)
     edit(root, "Telegram/BUILD", patch_app_display_name)
+    install_icon_composer(root)
     for strings in sorted(root.glob("Telegram/Telegram-iOS/*.lproj/InfoPlist.strings")):
         if "CFBundleDisplayName" in strings.read_text(encoding="utf-8"):
             edit(root, str(strings.relative_to(root)), patch_localized_display_name)
@@ -738,10 +803,14 @@ def main():
     edit(root, "submodules/ChatListUI/Sources/ChatContextMenus.swift", patch_chat_list_menu)
     edit(root, "submodules/ChatListUI/BUILD", patch_chat_list_build)
     edit(root, "submodules/TelegramUI/Sources/ChatController.swift", patch_confetti)
+    edit(root, "submodules/TelegramUI/Sources/ChatController.swift", patch_outgoing_plugins)
+    edit(root, "submodules/TelegramUI/Sources/OpenChatMessage.swift", patch_open_plugin_file)
     edit(root, "submodules/TelegramUI/Components/Chat/ChatMessageInteractiveFileNode/Sources/ChatMessageInteractiveFileNode.swift", patch_local_transcription)
     edit(root, f"{core}/Account/Account.swift", patch_auto_reply)
 
     edit(root, "submodules/TelegramUI/Sources/ManagedAudioRecorder.swift", patch_voice_recorder)
+    edit(root, "submodules/TelegramUI/BUILD", patch_telegramui_build)
+    edit(root, "submodules/TgVoipWebrtc/BUILD", patch_tgvoip_build)
     tgcalls = "submodules/TgVoipWebrtc/tgcalls/tgcalls"
     for rel in ("v2/InstanceV2Impl.cpp", "v2/InstanceV2ReferenceImpl.cpp", "v2/InstanceV2CompatImpl.cpp", "v2wasm/CallCoreHost.cpp"):
         edit(root, f"{tgcalls}/{rel}", patch_call_voice)

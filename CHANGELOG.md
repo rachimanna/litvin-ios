@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.0] — 2026-11-06
+- App icon: the Litvin "L" in the iOS 26 Icon Composer bundle (Telegram.icon), black background.
+- New voice engine (features/LitvinVoiceKit, C++ phase vocoder shared by voice messages and calls): pitch and formants change separately, so Девушка/Ребёнок/Мужчина/Злой sound like real voices; loudness kept equal to the original. New voice: Мужчина. Robot is a constant-pitch vocoder buzz.
+- Voice can be changed during a call: the call processor is always installed (bit-exact passthrough when off) and re-reads the settings every 0.5 s.
+- Plugins: JavaScript plugins (JavaScriptCore). Tap a .litvin.js / .js plugin file in a chat → «Запустить в Litvin». Settings → Litvin → Плагины: list, on/off, delete, add from Files, built-in example. API: litvin.command, litvin.onOutgoingMessage, litvin.storage, litvin.log. AyuGram/exteraGram (Android, Python) plugins are recognised and explained. Examples in plugins/examples.
+
 ## [1.0.0] — 2026-11-06
 - No ads: sponsored messages in channels are not loaded. Litvin → Без рекламы в каналах.
 - Edit history: previous versions of edited messages are kept; long-press → «История правок (N)».
