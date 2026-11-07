@@ -132,14 +132,14 @@ device. For a distribution build, supply your own valid Apple signing assets.
 GPLv2 (inherited from Telegram-iOS).
 
 
-## Локальное оформление (1.4.0)
+## Локальное оформление (1.4.1)
 
-Настройки → Litvin → Локальный Premium / Локальный номер, звёзды и NFT-подарки.
+Настройки → Litvin → «Оформление, номер и звёзды» / «Подарки без списания звёзд».
 
 - Premium: значок и оформление собственного профиля, без изменения подписки на сервере.
 - Номер: нажми свой номер → «Изменить локальный номер». Можно вернуть настоящий номер, очистив поле. Номер для входа не меняется.
-- Звёзды: локальное число в «Мои звёзды» и строке настроек. Покупки, переводы и TON используют настоящий баланс.
-- Подарки: профиль собеседника → «Отправить подарок» → карточка подарка. Вкладка NFT открывает коллекции и варианты без ввода ссылок; обычный подарок добавляется одним нажатием. Выбор сохраняется только на этом устройстве. Покупка настоящего подарка доступна отдельной кнопкой. Управление локальными копиями — «Локальные подарки» в профиле.
+- Звёзды: локальное число в «Мои звёзды», строке настроек и «Балансе» справа сверху в каталоге подарков. Покупки, переводы и TON используют настоящий баланс.
+- Подарки: профиль собеседника → «Отправить подарок» → карточка подарка. Вкладка NFT открывает коллекции и варианты без ввода ссылок; обычный подарок добавляется одним нажатием. Выбор сохраняется только на этом устройстве. Для обычной отправки отключи «Подарки без списания звёзд». Убрать копию можно долгим нажатием в профиле.
 - Названия функций в настройках отображаются без эмодзи.
 
 Раздел «Сбросить локальное оформление» возвращает исходные значения и убирает локальные подарки. Это не восстанавливает сообщения и не меняет реальное владение NFT.
@@ -150,3 +150,10 @@ GPLv2 (inherited from Telegram-iOS).
 ## Build base: Telegram 13.0.0
 
 UPSTREAM_REF is pinned to `release-13.0.0`. CI uses macOS 26 and selects the Xcode version in upstream versions.json (26.6). The 13.1-specific mergedServerMessageUpdate adapter is removed; remote edit history uses the 13.0 patch path. Appearance patches tolerate both public and restricted Postbox BUILD layouts. Run `python3 scripts/verify_runtime.py` and `python3 scripts/verify_appearance.py` to verify source anchors and repeatability before building.
+
+
+## Native gift flow
+
+The separate UIKit gift picker and profile tool row are removed. Gifts are selected in Telegram’s original GiftOptionsScreen and resale store. Settings → Litvin → «Подарки без списания звёзд» enables private previews; fresh accounts default to disabled, and existing appearance data without this field keeps the previous preview mode. In preview mode a standard gift is added on selection; NFT selection uses the native resale detail/send flow, without payment RPCs. Disable the switch for normal Telegram sending.
+
+Profile gifts open the native GiftViewScreen. The pager derives its items and selected index from one snapshot, including private entries; a stale tap opens that exact gift alone. Private copies show the recipient as owner, the account as sender, and a default display listing price of 1,000 Stars. They use the native detail layout and Close button. Real owned gifts keep their real metadata and original actions. Private entries never invoke sale, transfer, wear, crafting, offer or payment RPCs. Long press removes a private entry.

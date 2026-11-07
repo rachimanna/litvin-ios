@@ -24,7 +24,7 @@ jobs:
           SOURCE=overlay/submodules/TelegramCore/Sources/Litvin/LitvinAppearance.swift
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           xcrun swiftc -typecheck -sdk "$SDK" -target arm64-apple-ios15.0 "$SOURCE"
-          xcrun swiftc "$SOURCE" scripts/tests/AppearanceTests.swift -o "$RUNNER_TEMP/appearance-tests"
+          xcrun swiftc "$SOURCE" overlay/submodules/TelegramCore/Sources/Litvin/LitvinGiftSelection.swift scripts/tests/AppearanceTests.swift -o "$RUNNER_TEMP/appearance-tests"
           "$RUNNER_TEMP/appearance-tests"
       - name: Parse client additions and integrated views
         run: |

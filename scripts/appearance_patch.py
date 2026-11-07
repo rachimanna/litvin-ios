@@ -34,6 +34,8 @@ def patch(root, path, transform):
 
 
 def apply(root):
+    from native_gift_patch import apply as native_gifts
+    native_gifts(root, patch, replace)
     patch(root, "submodules/Postbox/BUILD", lambda t: replace(t, '        "//submodules/LegacyMediaPickerUI",\n', '        "//submodules/LegacyMediaPickerUI",\n        "//submodules/LitvinFeatures/LitvinSettings",\n', "Litvin settings Postbox visibility") if 'name = "clients"' in t else t)
     # Local appearance is confined to presentation. Never modify EnginePeer,
     # StarsContext balances, account credentials or server entitlement checks.
@@ -53,9 +55,6 @@ def apply(root):
         t = replace(t, '        if let phone = user.phone {\n            let formattedPhone = formatPhoneNumber(context: context, number: phone)',
             '        if let phone = user.phone {\n            let formattedPhone = LitvinAppearance.phone(account: context.account.peerId.toInt64(), peer: user.id.toInt64(), original: formatPhoneNumber(context: context, number: phone))', 'local profile phone')
         return replace(t, '        let ItemVerification = 9004\n', '''        let ItemVerification = 9004
-        items[.peerInfoTrailing]!.append(PeerInfoScreenActionItem(id: 19001, text: "Локальные подарки", action: {
-            LitvinAppearanceTools.showGifts(context: context, peer: user.id.toInt64())
-        }))
 ''', 'profile gift manager')
     patch(root, peer_info + '/Sources/PeerInfoProfileItems.swift', appearance_profile)
 
@@ -130,56 +129,37 @@ def apply(root):
         return t
     patch(root, peer_info + '/Sources/PeerInfoData.swift', local_gift_tab)
 
-    def gift_entry(t):
-        t = imported(t, 'LitvinSettings')
-        return replace(t, '    func openPremiumGift() {\n', '''    func openPremiumGift(local: Bool = true) {
-        if local, let giftPeer = self.data?.peer {
-            LitvinGiftCatalog.show(context: self.context, peer: giftPeer.id.toInt64(), realGift: { [weak self] in self?.openPremiumGift(local: false) })
-            return
-        }
-''', 'profile local gift catalog')
-    patch(root, peer_info + '/Sources/PeerInfoScreen.swift', gift_entry)
-
     def appearance_gifts(t):
         prefix, separator, t = t.partition('public final class ProfileGiftsContext {')
         t, end_separator, suffix = t.partition('// MARK: - CraftGiftsContext')
         if not separator or not end_separator: raise RuntimeError('ProfileGiftsContext boundaries changed')
-        t = replace(t, '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n', '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n    private let litvinAccountId: Int64\n', 'gift presentation account')
+        t = replace(t, '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n', '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n    private let litvinAccountId: Int64\n    private let litvinAccount: Account\n', 'gift presentation account')
         t = replace(t, '            return ProfileGiftsContextImpl(queue: queue, account: account, peerId: peerId, collectionId: collectionId, sorting: sorting, filter: filter, limit: limit)\n', '            return ProfileGiftsContextImpl(queue: queue, account: account, peerId: peerId, collectionId: collectionId, sorting: sorting, filter: filter, limit: limit)\n', 'profile gift impl')
         anchor = '        let queue = self.queue\n        self.impl = QueueLocalObject(queue: queue, generate: {\n            return ProfileGiftsContextImpl'
-        t = replace(t, anchor, '        self.litvinAccountId = account.peerId.toInt64()\n' + anchor, 'gift presentation account init')
+        t = replace(t, anchor, '        self.litvinAccountId = account.peerId.toInt64()\n        self.litvinAccount = account\n' + anchor, 'gift presentation account init')
         old = '''                disposable.set(impl.state.start(next: { value in
                     subscriber.putNext(value)
                 }))'''
-        new = '''                disposable.set((combineLatest(impl.state, litvinAppearanceUpdates())
-                |> deliverOnMainQueue).start(next: { value, _ in
-                    subscriber.putNext(litvinProfileGifts(account: impl.account.peerId.toInt64(), peer: impl.peerId.toInt64(), collection: impl.collectionId, state: value))
+        new = '''                disposable.set((combineLatest(impl.state, litvinAppearanceUpdates(), litvinSender)
+                |> deliverOnMainQueue).start(next: { value, _, sender in
+                    subscriber.putNext(litvinProfileGifts(account: impl.account.peerId.toInt64(), peer: impl.peerId.toInt64(), collection: impl.collectionId, state: value, sender: sender))
                 }))'''
         # Capture immutable wrapper values; the impl's account fields are private.
         new = new.replace('impl.account.peerId.toInt64()', 'litvinAccount').replace('impl.peerId.toInt64()', 'litvinPeer').replace('impl.collectionId', 'litvinCollection')
-        t = replace(t, '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        return Signal { subscriber in', '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        let litvinAccount = self.litvinAccountId\n        let litvinPeer = self.peerId.toInt64()\n        let litvinCollection = self.collectionId\n        return Signal { subscriber in', 'gift state context')
+        t = replace(t, '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        return Signal { subscriber in', '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        let litvinAccount = self.litvinAccountId\n        let litvinPeer = self.peerId.toInt64()\n        let litvinCollection = self.collectionId\n        let litvinSender = TelegramEngine(account: self.litvinAccount).data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: self.litvinAccount.peerId))\n        return Signal { subscriber in', 'gift state context')
         t = replace(t, old, new, 'local profile gift state')
         t = replace(t, '            state = impl._state\n', '            state = impl._state.map { litvinProfileGifts(account: self.litvinAccountId, peer: self.peerId.toInt64(), collection: self.collectionId, state: $0) }\n', 'local gift current state')
         return prefix + separator + t + end_separator + suffix
     patch(root, f'{CORE}/Sources/TelegramEngine/Payments/StarGifts.swift', appearance_gifts)
 
-    # Local gift previews do not enter sell/transfer/wear/purchase controllers.
-    def local_gift_taps(t):
-        anchor = '''                                if self.canSelect {
-                                    if self.selectedItemIds.contains(itemReferenceId) {'''
-        t = replace(t, anchor, '''                                if litvinIsLocalGift(product) {
-                                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: "Локальный подарок", text: "Оформление видно только на этом устройстве. Управление — в профиле: Локальные NFT-подарки.", timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: false, action: { _ in false }), in: .current)
-                                    return
-                                }
-''' + anchor, 'local gift tap isolation')
-        return replace(t, '(self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }', '(self.starsProducts ?? []).filter { !litvinIsLocalGift($0) }.map { .profileGift(self.peerId, $0) }', 'local gift swipe isolation')
     gifts_ui = f'{UI}/Components/PeerInfo/PeerInfoVisualMediaPaneNode'
-    patch(root, gifts_ui + '/Sources/GiftsListView.swift', local_gift_taps)
-    patch(root, gifts_ui + '/Sources/PeerInfoGiftsPaneNode.swift', lambda t: replace(t,
-        '    private func contextAction(gift: ProfileGiftsContext.State.StarGift, view: UIView, gesture: ContextGesture) {\n',
-        '''    private func contextAction(gift: ProfileGiftsContext.State.StarGift, view: UIView, gesture: ContextGesture) {
-        if litvinIsLocalGift(gift) { return }
-''', 'local gift context isolation'))
+    # Keep the pager list and selected index in the same coordinate space.
+    # In particular, do not filter local entries out of allSubjects.
+    def gift_pager(t):
+        old = 'let allSubjects: [GiftViewScreen.Subject] = (self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }\n                                    let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0'
+        new = 'let (litvinPagerGifts, index) = litvinGiftPagerSelection(items: self.starsProducts ?? [], selected: product)\n                                    let allSubjects: [GiftViewScreen.Subject] = litvinPagerGifts.map { .profileGift(self.peerId, $0) }'
+        return replace(t, old, new, 'gift pager index uses its displayed list')
+    patch(root, gifts_ui + '/Sources/GiftsListView.swift', gift_pager)
 
     stars_ui = f'{UI}/Components/Stars/StarsTransactionsScreen'
     def appearance_stars(t):

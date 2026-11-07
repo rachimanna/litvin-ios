@@ -16,7 +16,7 @@ public enum LitvinAppearanceTools {
                 }),
                 .init(title: "Изменить локальный номер", detail: state.phone ?? "Настоящий номер", action: { editPhone(account: account) }),
                 .init(title: "Локальные звёзды", detail: state.stars.map(String.init) ?? "Настоящий баланс", action: { editStars(account: account) }),
-                .init(title: "Локальные подарки", detail: "Выбрать собеседника и подарок", action: { choosePeer(context: context) }),
+                .init(title: "Подарки без списания звёзд", detail: litvinGiftPreviewEnabled(account: account) ? "Включено • видны только на этом устройстве" : "Выключено", action: { let enabled = litvinGiftPreviewEnabled(account: account); LitvinAppearance.update(account: account) { $0.giftPreviewEnabled = !enabled }; controller.reload() }),
                 .init(title: "Сбросить локальное оформление", detail: "Показать исходные данные аккаунта", action: {
                     LitvinAppearance.reset(account: account); controller.reload()
                 })
@@ -54,41 +54,6 @@ public enum LitvinAppearanceTools {
             }
             LitvinAppearance.update(account: account) { $0.stars = text.isEmpty ? nil : amount }
         }
-    }
-
-    static func choosePeer(context: AccountContext) {
-        LitvinAppearanceUI.prompt("Выбрать собеседника", message: "Введи имя из своих чатов или контактов.", fields: [("Имя", "", false)]) { values in
-            guard let query = values.first?.trimmingCharacters(in: .whitespacesAndNewlines), !query.isEmpty else { return }
-            let _ = (context.engine.contacts.searchLocalPeers(query: query) |> take(1) |> deliverOnMainQueue).startStandalone(next: { peers in
-                let controller = LitvinAppearanceRowsController(title: "Выбрать собеседника")
-                controller.rows = peers.compactMap { item in
-                    guard let peer = item.peer, case .user = peer else { return nil }
-                    return .init(title: peer.compactDisplayTitle, detail: "Локальные подарки в профиле", action: { showGifts(context: context, peer: peer.id.toInt64()) })
-                }
-                if controller.rows.isEmpty { controller.rows = [.init(title: "Ничего не найдено", detail: "Можно открыть профиль собеседника и выбрать «Локальные подарки».", action: {})] }
-                LitvinAppearanceUI.list(controller)
-            })
-        }
-    }
-
-    public static func showGifts(context: AccountContext, peer: Int64) {
-        let account = context.account.peerId.toInt64()
-        let controller = LitvinAppearanceRowsController(title: "Локальные подарки")
-        controller.refresh = {
-            var rows: [LitvinAppearanceRowsController.Row] = [
-                .init(title: "Отправить подарок", detail: "Выбрать в каталоге", action: { LitvinGiftCatalog.show(context: context, peer: peer) })
-            ]
-            rows += litvinLocalGifts(account: account, peer: peer).map { gift in
-                .init(title: litvinGiftTitle(gift), detail: "Виден только тебе. Нажми, чтобы убрать.", action: {
-                    LitvinAppearance.update(account: account) { state in
-                        state.gifts[String(peer)]?.removeValue(forKey: litvinGiftKey(gift))
-                        if state.gifts[String(peer)]?.isEmpty == true { state.gifts.removeValue(forKey: String(peer)) }
-                    }
-                })
-            }
-            return rows
-        }
-        LitvinAppearanceUI.list(controller)
     }
 
 }

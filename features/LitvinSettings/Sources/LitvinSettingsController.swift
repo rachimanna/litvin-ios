@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.4.0"
+public let litvinVersion = "1.4.1"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -58,6 +58,7 @@ private struct LitvinSettingsState: Equatable {
     var autoReplyText: String
     var pluginsCount: Int
     var localPremium: Bool
+    var previewGifts: Bool
 
     static func current(account: Int64) -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
@@ -75,7 +76,8 @@ private struct LitvinSettingsState: Equatable {
             autoReply: LitvinFlags.autoReply,
             autoReplyText: LitvinFlags.autoReplyText,
             pluginsCount: LitvinPluginManager.shared.allPlugins().count,
-            localPremium: LitvinAppearance.state(account: account).premium
+            localPremium: LitvinAppearance.state(account: account).premium,
+            previewGifts: litvinGiftPreviewEnabled(account: account)
         )
     }
 }
@@ -339,8 +341,9 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
         .extraSwitch(2, LitvinFlags.localTranscriptionKey, "Голосовые в текст", state.localTranscription),
         .extraSwitch(3, LitvinFlags.confettiKey, "Конфетти", state.confetti),
         .extraSwitch(4, "litvin.localPremium", "Локальный Premium", state.localPremium),
-        .appearance("Локальный номер, звёзды и NFT-подарки"),
-        .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или . Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
+        .extraSwitch(5, "litvin.previewGifts", "Подарки без списания звёзд", state.previewGifts),
+        .appearance("Оформление, номер и звёзды"),
+        .extrasInfo("Подарки без списания звёзд видны только на этом устройстве. Выбор — в обычном каталоге профиля. История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или . Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
         .autoReplyHeader("АВТООТВЕТ"),
         .autoReply("Автоответ в личных чатах", state.autoReply),
         .autoReplyText(state.autoReplyText),
@@ -360,6 +363,10 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
     var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = LitvinSettingsArguments(toggle: { key, value in
+        if key == "litvin.previewGifts" {
+            LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.giftPreviewEnabled = value }
+            statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64())); return
+        }
         if key == "litvin.localPremium" {
             LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.premium = value }
             statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64())); return

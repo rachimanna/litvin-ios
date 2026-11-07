@@ -2,6 +2,8 @@ import Foundation
 
 /// Presentation overrides only. Never changes account credentials or entitlements.
 public struct LitvinAppearanceState: Codable, Equatable {
+    public var giftPreviewEnabled: Bool? = false
+    public var giftPreviewPrice: Int64?
     public var premium = false
     public var phone: String?
     public var stars: Int64?
@@ -32,9 +34,10 @@ public enum LitvinAppearance {
         transform(&value)
         let valid = value.phone.map { $0.count <= 64 && !$0.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) } ?? true
         let starsValid = value.stars.map { (0...maximumStars).contains($0) } ?? true
+        let priceValid = value.giftPreviewPrice.map { (0...maximumStars).contains($0) } ?? true
         let giftsValid = value.gifts.values.reduce(0) { $0 + $1.count } <= 100
             && value.gifts.values.allSatisfy { $0.allSatisfy { $0.key.count <= 128 && $0.value.count <= 256 * 1024 } }
-        guard valid, starsValid, giftsValid, let data = try? JSONEncoder().encode(value), data.count <= 8 * 1024 * 1024 else { lock.unlock(); return false }
+        guard valid, starsValid, priceValid, giftsValid, let data = try? JSONEncoder().encode(value), data.count <= 8 * 1024 * 1024 else { lock.unlock(); return false }
         UserDefaults.standard.set(data, forKey: prefix + String(account))
         lock.unlock()
         DispatchQueue.main.async { NotificationCenter.default.post(name: changed, object: account) }
