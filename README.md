@@ -145,3 +145,8 @@ GPLv2 (inherited from Telegram-iOS).
 Раздел «Сбросить локальное оформление» возвращает исходные значения и убирает локальные подарки. Это не восстанавливает сообщения и не меняет реальное владение NFT.
 
 Проверки: `python3 scripts/verify_appearance.py` проверяет повторное применение патчей к закреплённому upstream. Workflow Validate local appearance проверяет Swift, iOS Foundation и изоляцию локальных настроек. Полную компиляцию клиента выполняет Build Litvin iOS.
+
+
+## Build base: Telegram 13.0.0
+
+UPSTREAM_REF is pinned to `release-13.0.0`. CI uses macOS 26 and selects the Xcode version in upstream versions.json (26.6). The 13.1-specific mergedServerMessageUpdate adapter is removed; remote edit history uses the 13.0 patch path. Appearance patches tolerate both public and restricted Postbox BUILD layouts. Run `python3 scripts/verify_runtime.py` and `python3 scripts/verify_appearance.py` to verify source anchors and repeatability before building.

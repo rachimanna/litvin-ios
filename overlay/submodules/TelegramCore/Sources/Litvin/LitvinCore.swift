@@ -526,10 +526,3 @@ public func litvinMapOutgoingTexts(_ messages: [EnqueueMessage], _ transform: (S
     }
     return result
 }
-
-// Newer Telegram (13.1+) merges remote edits through mergedServerMessageUpdate.
-func litvinApplyEditHistory(previous: Message, merged: StoreMessage) -> StoreMessage {
-    var attributes = merged.attributes
-    litvinApplyEditHistory(previous: previous, newText: merged.text, attributes: &attributes)
-    return merged.withUpdatedAttributes(attributes)
-}

@@ -34,7 +34,7 @@ def patch(root, path, transform):
 
 
 def apply(root):
-    patch(root, "submodules/Postbox/BUILD", lambda t: replace(t, '        "//submodules/LegacyMediaPickerUI",\n', '        "//submodules/LegacyMediaPickerUI",\n        "//submodules/LitvinFeatures/LitvinSettings",\n', "Litvin settings Postbox visibility"))
+    patch(root, "submodules/Postbox/BUILD", lambda t: replace(t, '        "//submodules/LegacyMediaPickerUI",\n', '        "//submodules/LegacyMediaPickerUI",\n        "//submodules/LitvinFeatures/LitvinSettings",\n', "Litvin settings Postbox visibility") if 'name = "clients"' in t else t)
     # Local appearance is confined to presentation. Never modify EnginePeer,
     # StarsContext balances, account credentials or server entitlement checks.
     peer_info = f'{UI}/Components/PeerInfo/PeerInfoScreen'

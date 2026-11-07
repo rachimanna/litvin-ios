@@ -17,6 +17,8 @@ jobs:
         env:
           LITVIN_APPEARANCE_FIXTURE: ${{ runner.temp }}/appearance-fixture
         run: python3 scripts/verify_appearance.py
+      - name: Verify runtime and voice patches
+        run: python3 scripts/verify_runtime.py
       - name: Typecheck and test local storage
         run: |
           SOURCE=overlay/submodules/TelegramCore/Sources/Litvin/LitvinAppearance.swift
