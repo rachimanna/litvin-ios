@@ -4,6 +4,20 @@
 def apply(root, patch, replace):
     prefix = 'submodules/TelegramUI/Components/Gifts'
 
+    anchor = '    declareEncodable(ContentRequiresValidationMessageAttribute.self, f: { ContentRequiresValidationMessageAttribute(decoder: $0) })\n'
+    patch(root, 'submodules/TelegramCore/Sources/Account/AccountManager.swift', lambda t: replace(t, anchor, anchor + '    declareEncodable(LitvinGiftPreviewMessageAttribute.self, f: { LitvinGiftPreviewMessageAttribute(decoder: $0) })\n', 'persist private gift message marker'))
+
+    def store_balance(t):
+        t = replace(t, '        private var balanceDisposable: Disposable?\n', '        private var balanceDisposable: Disposable?\n        private var litvinAppearanceObserver: NSObjectProtocol?\n', 'NFT store appearance observer')
+        t = replace(t, '            super.init(frame: frame)\n', '''            super.init(frame: frame)
+            self.litvinAppearanceObserver = NotificationCenter.default.addObserver(forName: LitvinAppearance.changed, object: nil, queue: .main) { [weak self] _ in
+                self?.componentState?.updated()
+            }
+''', 'NFT store live balance refresh')
+        t = replace(t, '        deinit {\n            self.balanceDisposable?.dispose()', '        deinit {\n            if let litvinAppearanceObserver { NotificationCenter.default.removeObserver(litvinAppearanceObserver) }\n            self.balanceDisposable?.dispose()', 'NFT store observer disposal')
+        return replace(t, 'presentationStringsFormattedNumber(Int32(clamping: self.starsBalance), presentationData.dateTimeFormat.groupingSeparator)', 'formatStarsAmountText(litvinDisplayStars(account: component.context.account.peerId.toInt64(), original: StarsAmount(value: self.starsBalance, nanos: 0)), dateTimeFormat: presentationData.dateTimeFormat)', 'NFT store displayed balance')
+    patch(root, prefix + '/GiftStoreScreen/Sources/BalanceComponent.swift', store_balance)
+
     def catalogue(t):
         t = replace(t, '        private var starsState: StarsContext.State?\n', '        private var starsState: StarsContext.State?\n        private var litvinAppearanceObserver: NSObjectProtocol?\n', 'catalogue appearance observer')
         t = replace(t, '            super.init(frame: frame)\n', '''            super.init(frame: frame)
@@ -15,19 +29,22 @@ def apply(root, patch, replace):
         t = replace(t, 'let formattedBalance = formatStarsAmountText(self.starsState?.balance ?? StarsAmount.zero, dateTimeFormat: environment.dateTimeFormat)', 'let formattedBalance = formatStarsAmountText(litvinDisplayStars(account: component.context.account.peerId.toInt64(), original: self.starsState?.balance ?? StarsAmount.zero, enabled: !component.starsContext.ton), dateTimeFormat: environment.dateTimeFormat)', 'catalogue displayed balance')
         anchor = '            let starGift = gift\n'
         return replace(t, anchor, anchor + '''            if litvinGiftPreviewEnabled(account: context.account.peerId.toInt64()) {
-                if case .resale = self.starsFilter, case let .generic(collection) = gift,
+                if case let .generic(collection) = gift, (collection.availability?.resale ?? 0) > 0,
                    let controller = environment.controller() as? GiftOptionsScreen {
                     let store = context.sharedContext.makeGiftStoreController(context: context, peerId: component.peerId, gift: collection)
                     (controller.parentController() ?? controller).push(store)
                     return
                 }
-                if litvinSaveGiftPreview(account: context.account.peerId.toInt64(), sender: context.account.peerId, peer: component.peerId, gift: gift) {
-                    HapticFeedback().success()
-                    component.completion?()
-                    environment.controller()?.dismiss()
-                } else {
-                    environment.controller()?.present(textAlertController(context: context, title: nil, text: "Не удалось сохранить подарок. Лимит — 100 подарков на устройстве.", actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]), in: .window(.root))
-                }
+                let _ = (litvinSendGiftPreview(account: context.account, peerId: component.peerId, gift: gift)
+                |> deliverOnMainQueue).start(next: { saved in
+                    if saved {
+                        HapticFeedback().success()
+                        component.completion?()
+                        environment.controller()?.dismiss()
+                    } else {
+                        environment.controller()?.present(textAlertController(context: context, title: nil, text: "Не удалось сохранить подарок. Лимит — 100 подарков на устройстве.", actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]), in: .window(.root))
+                    }
+                })
                 return
             }
 ''', 'native catalogue preview send')
@@ -37,14 +54,18 @@ def apply(root, patch, replace):
         anchor = ') {\n    let presentationData = context.sharedContext.currentPresentationData.with { $0 }\n'
         return replace(t, anchor, ''') {
     if litvinGiftPreviewEnabled(account: context.account.peerId.toInt64()) {
-        if litvinSaveGiftPreview(account: context.account.peerId.toInt64(), sender: context.account.peerId, peer: recipientPeerId, gift: .unique(uniqueGift)) {
-            HapticFeedback().success()
+        updateProgress(true)
+        let _ = (litvinSendGiftPreview(account: context.account, peerId: recipientPeerId, gift: .unique(uniqueGift))
+        |> deliverOnMainQueue).start(next: { saved in
             updateProgress(false)
-            completion()
-        } else {
-            let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
-            getController()?.present(textAlertController(context: context, title: nil, text: "Не удалось сохранить подарок. Лимит — 100 подарков на устройстве.", actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]), in: .window(.root))
-        }
+            if saved {
+                HapticFeedback().success()
+                completion()
+            } else {
+                let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+                getController()?.present(textAlertController(context: context, title: nil, text: "Не удалось сохранить подарок. Лимит — 100 подарков на устройстве.", actions: [TextAlertAction(type: .defaultAction, title: strings.Common_OK, action: {})]), in: .window(.root))
+            }
+        })
         return
     }
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -52,6 +73,13 @@ def apply(root, patch, replace):
     patch(root, prefix + '/GiftViewScreen/Sources/GiftViewBuyGift.swift', purchase)
 
     def details(t):
+        t = replace(t, '                    if let _ = arguments.resellAmounts, !isOwn {\n', '                    if let _ = arguments.resellAmounts, !isOwn, !subject.litvinIsPreview, !litvinGiftPreviewEnabled(account: context.account.peerId.toInt64()) {\n', 'private NFT skips payment form request')
+        t = replace(t, '            if let resellTooEarlyTimestamp = self.resellTooEarlyTimestamp {\n', '            if let resellTooEarlyTimestamp = self.resellTooEarlyTimestamp, !litvinGiftPreviewEnabled(account: self.context.account.peerId.toInt64()) {\n', 'private NFT does not require resale eligibility')
+        t = replace(t, '            guard let _ = self.buyForm else {\n', '            guard litvinGiftPreviewEnabled(account: self.context.account.peerId.toInt64()) || self.buyForm != nil else {\n', 'private NFT does not require a payment form')
+        # Local history cards have no server gift reference.
+        for suffix in ['message.flags.contains(.Incoming)', 'incoming']:
+            anchor = 'message.id, reference, ' + suffix + ', gift'
+            t = replace(t, anchor, 'message.id, (litvinIsGiftPreviewMessage(message) ? nil : reference), ' + suffix + ', gift', 'local history gift reference: ' + suffix)
         # Keep the private marker out of the normal message/description text.
         t = replace(t, 'gift.gift, gift.date, gift.convertStars, gift.text, gift.entities, gift.nameHidden,',
             'gift.gift, gift.date, gift.convertStars, (litvinIsLocalGift(gift) ? nil : gift.text), gift.entities, gift.nameHidden,', 'hide internal preview marker')
@@ -88,11 +116,13 @@ def apply(root, patch, replace):
                 }
                 return
             }
+            if self.subject.litvinIsPreview { return }
 ''', 'preview profile visibility')
         extension = '''
 extension GiftViewScreen.Subject {
     var litvinIsPreview: Bool {
         if case let .profileGift(_, gift) = self { return litvinIsLocalGift(gift) }
+        if case let .message(message) = self { return litvinIsGiftPreviewMessage(message) }
         return false
     }
 }

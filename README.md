@@ -132,7 +132,7 @@ device. For a distribution build, supply your own valid Apple signing assets.
 GPLv2 (inherited from Telegram-iOS).
 
 
-## Локальное оформление (1.4.1)
+## Локальное оформление (1.4.2)
 
 Настройки → Litvin → «Оформление, номер и звёзды» / «Подарки без списания звёзд».
 
@@ -154,6 +154,6 @@ UPSTREAM_REF is pinned to `release-13.0.0`. CI uses macOS 26 and selects the Xco
 
 ## Native gift flow
 
-The separate UIKit gift picker and profile tool row are removed. Gifts are selected in Telegram’s original GiftOptionsScreen and resale store. Settings → Litvin → «Подарки без списания звёзд» enables private previews; fresh accounts default to disabled, and existing appearance data without this field keeps the previous preview mode. In preview mode a standard gift is added on selection; NFT selection uses the native resale detail/send flow, without payment RPCs. Disable the switch for normal Telegram sending.
+The separate UIKit gift picker and profile tool row are removed. Gifts are selected in Telegram’s original GiftOptionsScreen and resale store. Settings → Litvin → «Подарки без списания звёзд» enables private previews; fresh accounts default to disabled, and existing appearance data without this field keeps the previous preview mode. In preview mode every collection with resale variants opens the native NFT store from both All and Collectibles; choose the model, backdrop (including black when listed) and concrete NFT before adding it. Standard gifts without resale variants are added on selection. Both paths persist a native local-only gift service card in chat history and a profile entry, without payment RPCs or outgoing send flags. Disable the switch for normal Telegram sending.
 
-Profile gifts open the native GiftViewScreen. The pager derives its items and selected index from one snapshot, including private entries; a stale tap opens that exact gift alone. Private copies show the recipient as owner, the account as sender, and a default display listing price of 1,000 Stars. They use the native detail layout and Close button. Real owned gifts keep their real metadata and original actions. Private entries never invoke sale, transfer, wear, crafting, offer or payment RPCs. Long press removes a private entry.
+Profile gifts open the native GiftViewScreen. The pager derives its items and selected index from one snapshot, including private entries; a stale tap opens that exact gift alone. Private copies show the recipient as owner, the account as sender, and a default display listing price of 1,000 Stars. They use the native detail layout and Close button in both profiles and chat history. Real owned gifts keep their real metadata and original actions. Private entries never invoke sale, transfer, wear, crafting, offer or payment RPCs. Long press removes a private entry.
