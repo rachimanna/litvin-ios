@@ -8,6 +8,8 @@ swift_library(
     ]),
     copts = [],
     deps = [
+        "//submodules/ComponentFlow:ComponentFlow",
+        "//submodules/TelegramUI/Components/Gifts/GiftItemComponent:GiftItemComponent",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",

@@ -19,9 +19,10 @@ public func litvinIsLocalGift(_ gift: ProfileGiftsContext.State.StarGift) -> Boo
     return gift.reference == nil && gift.text == litvinLocalGiftLabel
 }
 
-public func litvinLocalGifts(account: Int64, peer: Int64) -> [StarGift.UniqueGift] {
+public func litvinLocalGifts(account: Int64, peer: Int64) -> [StarGift] {
     return (LitvinAppearance.state(account: account).gifts[String(peer)] ?? [:]).sorted { $0.key < $1.key }.compactMap {
-        try? JSONDecoder().decode(StarGift.UniqueGift.self, from: $0.value)
+        if let gift = try? JSONDecoder().decode(StarGift.self, from: $0.value) { return gift }
+        return (try? JSONDecoder().decode(StarGift.UniqueGift.self, from: $0.value)).map { .unique($0) }
     }
 }
 
@@ -29,19 +30,31 @@ public func litvinProfileGifts(account: Int64, peer: Int64, collection: Int32?, 
     guard collection == nil else { return state }
     var state = state
     let existing = Set(state.gifts.compactMap { gift -> String? in
-        if case let .unique(unique) = gift.gift { return unique.slug }; return nil
+        return litvinGiftKey(gift.gift)
     })
-    let additions: [ProfileGiftsContext.State.StarGift] = litvinLocalGifts(account: account, peer: peer).filter { !existing.contains($0.slug) }.map { unique in
-        ProfileGiftsContext.State.StarGift(gift: .unique(unique), reference: nil, fromPeer: nil, date: 0,
+    let additions: [ProfileGiftsContext.State.StarGift] = litvinLocalGifts(account: account, peer: peer).filter { !existing.contains(litvinGiftKey($0)) }.map { gift in
+        ProfileGiftsContext.State.StarGift(gift: gift, reference: nil, fromPeer: nil, date: 0,
             text: litvinLocalGiftLabel, entities: nil, nameHidden: true, savedToProfile: true, pinnedToTop: false,
             convertStars: nil, canUpgrade: false, canExportDate: nil, upgradeStars: nil, transferStars: nil,
             canTransferDate: nil, canResaleDate: nil, collectionIds: nil, prepaidUpgradeHash: nil,
             upgradeSeparate: false, dropOriginalDetailsStars: nil, number: nil, isRefunded: false, canCraftAt: nil)
     }
     state.gifts = additions + state.gifts
-    if state.filter.contains(.unique) && state.filter.contains(.displayed) {
-        state.filteredGifts = additions + state.filteredGifts
-        state.count = (state.count ?? Int32(state.filteredGifts.count - additions.count)) + Int32(additions.count)
+    let visible = additions.filter { item in
+        guard state.filter.contains(.displayed) else { return false }
+        switch item.gift {
+        case .unique: return state.filter.contains(.unique)
+        case let .generic(gift): return gift.availability == nil ? state.filter.contains(.unlimited) : (gift.upgradeStars != nil ? state.filter.contains(.limitedUpgradable) : state.filter.contains(.limitedNonUpgradable))
+        }
     }
+    state.filteredGifts = visible + state.filteredGifts
+    state.count = (state.count ?? Int32(state.filteredGifts.count - visible.count)) + Int32(visible.count)
     return state
+}
+
+public func litvinGiftKey(_ gift: StarGift) -> String {
+    switch gift { case let .unique(gift): return gift.slug; case let .generic(gift): return "generic-\(gift.id)" }
+}
+public func litvinGiftTitle(_ gift: StarGift) -> String {
+    switch gift { case let .unique(gift): return "\(gift.title) #\(gift.number)"; case let .generic(gift): return gift.title ?? "Подарок" }
 }

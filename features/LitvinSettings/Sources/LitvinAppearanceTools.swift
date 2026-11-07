@@ -16,7 +16,7 @@ public enum LitvinAppearanceTools {
                 }),
                 .init(title: "Изменить локальный номер", detail: state.phone ?? "Настоящий номер", action: { editPhone(account: account) }),
                 .init(title: "Локальные звёзды", detail: state.stars.map(String.init) ?? "Настоящий баланс", action: { editStars(account: account) }),
-                .init(title: "Локальные NFT-подарки", detail: "Выбрать собеседника и подарок", action: { choosePeer(context: context) }),
+                .init(title: "Локальные подарки", detail: "Выбрать собеседника и подарок", action: { choosePeer(context: context) }),
                 .init(title: "Сбросить локальное оформление", detail: "Показать исходные данные аккаунта", action: {
                     LitvinAppearance.reset(account: account); controller.reload()
                 })
@@ -65,7 +65,7 @@ public enum LitvinAppearanceTools {
                     guard let peer = item.peer, case .user = peer else { return nil }
                     return .init(title: peer.compactDisplayTitle, detail: "Локальные подарки в профиле", action: { showGifts(context: context, peer: peer.id.toInt64()) })
                 }
-                if controller.rows.isEmpty { controller.rows = [.init(title: "Ничего не найдено", detail: "Можно открыть профиль собеседника и выбрать «Локальные NFT-подарки».", action: {})] }
+                if controller.rows.isEmpty { controller.rows = [.init(title: "Ничего не найдено", detail: "Можно открыть профиль собеседника и выбрать «Локальные подарки».", action: {})] }
                 LitvinAppearanceUI.list(controller)
             })
         }
@@ -73,15 +73,15 @@ public enum LitvinAppearanceTools {
 
     public static func showGifts(context: AccountContext, peer: Int64) {
         let account = context.account.peerId.toInt64()
-        let controller = LitvinAppearanceRowsController(title: "Локальные NFT-подарки")
+        let controller = LitvinAppearanceRowsController(title: "Локальные подарки")
         controller.refresh = {
             var rows: [LitvinAppearanceRowsController.Row] = [
-                .init(title: "Добавить NFT-подарок", detail: "Вставить ссылку t.me/nft на любой существующий подарок", action: { addGift(context: context, peer: peer) })
+                .init(title: "Отправить подарок", detail: "Выбрать в каталоге", action: { LitvinGiftCatalog.show(context: context, peer: peer) })
             ]
             rows += litvinLocalGifts(account: account, peer: peer).map { gift in
-                .init(title: "\(gift.title) #\(gift.number)", detail: "Виден только тебе. Нажми, чтобы убрать.", action: {
+                .init(title: litvinGiftTitle(gift), detail: "Виден только тебе. Нажми, чтобы убрать.", action: {
                     LitvinAppearance.update(account: account) { state in
-                        state.gifts[String(peer)]?.removeValue(forKey: gift.slug)
+                        state.gifts[String(peer)]?.removeValue(forKey: litvinGiftKey(gift))
                         if state.gifts[String(peer)]?.isEmpty == true { state.gifts.removeValue(forKey: String(peer)) }
                     }
                 })
@@ -91,25 +91,4 @@ public enum LitvinAppearanceTools {
         LitvinAppearanceUI.list(controller)
     }
 
-    static func addGift(context: AccountContext, peer: Int64) {
-        LitvinAppearanceUI.prompt("Добавить NFT-подарок", message: "Ссылка вида https://t.me/nft/PlushPepe-123 или его slug. Загрузим оформление из Telegram и сохраним локально.", fields: [("Ссылка или slug", "", false)]) { values in
-            guard let raw = values.first?.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-            let slug: String
-            if raw.contains("://") {
-                guard let url = URL(string: raw), url.scheme == "https", url.host?.lowercased() == "t.me", url.pathComponents.count == 3, url.pathComponents[1] == "nft", url.query == nil, url.fragment == nil else {
-                    LitvinAppearanceUI.info("Неверная ссылка", "Нужна ссылка https://t.me/nft/Название-Номер."); return
-                }
-                slug = url.lastPathComponent
-            } else { slug = raw }
-            guard slug.count <= 128, slug.range(of: "^[A-Za-z0-9]+-[0-9]+$", options: .regularExpression) != nil else {
-                LitvinAppearanceUI.info("Неверный подарок", "Укажи название и номер, например PlushPepe-123."); return
-            }
-            let _ = (context.engine.payments.getUniqueStarGift(slug: slug) |> deliverOnMainQueue).startStandalone(next: { gift in
-                guard let data = try? JSONEncoder().encode(gift), LitvinAppearance.update(account: context.account.peerId.toInt64(), { $0.gifts[String(peer), default: [:]][gift.slug] = data }) else {
-                    LitvinAppearanceUI.info("Не удалось сохранить", "Максимум 100 локальных подарков."); return
-                }
-                LitvinAppearanceUI.info("Подарок добавлен", "Он появится во вкладке подарков этого профиля только у тебя. Если вкладка ещё не появилась, открой профиль заново.")
-            }, error: { _ in LitvinAppearanceUI.info("Подарок недоступен", "Проверь ссылку и подключение к Telegram.") })
-        }
-    }
 }

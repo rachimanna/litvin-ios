@@ -34,6 +34,7 @@ def patch(root, path, transform):
 
 
 def apply(root):
+    patch(root, "submodules/Postbox/BUILD", lambda t: replace(t, '        "//submodules/LegacyMediaPickerUI",\n', '        "//submodules/LegacyMediaPickerUI",\n        "//submodules/LitvinFeatures/LitvinSettings",\n', "Litvin settings Postbox visibility"))
     # Local appearance is confined to presentation. Never modify EnginePeer,
     # StarsContext balances, account credentials or server entitlement checks.
     peer_info = f'{UI}/Components/PeerInfo/PeerInfoScreen'
@@ -52,7 +53,7 @@ def apply(root):
         t = replace(t, '        if let phone = user.phone {\n            let formattedPhone = formatPhoneNumber(context: context, number: phone)',
             '        if let phone = user.phone {\n            let formattedPhone = LitvinAppearance.phone(account: context.account.peerId.toInt64(), peer: user.id.toInt64(), original: formatPhoneNumber(context: context, number: phone))', 'local profile phone')
         return replace(t, '        let ItemVerification = 9004\n', '''        let ItemVerification = 9004
-        items[.peerInfoTrailing]!.append(PeerInfoScreenActionItem(id: 19001, text: "Локальные NFT-подарки", action: {
+        items[.peerInfoTrailing]!.append(PeerInfoScreenActionItem(id: 19001, text: "Локальные подарки", action: {
             LitvinAppearanceTools.showGifts(context: context, peer: user.id.toInt64())
         }))
 ''', 'profile gift manager')
@@ -111,6 +112,7 @@ def apply(root):
         super.didLoad()
         self.litvinAppearanceObserver = NotificationCenter.default.addObserver(forName: LitvinAppearance.changed, object: nil, queue: .main) { [weak self] _ in
             guard let self, let data = self.data else { return }
+            if !litvinLocalGifts(account: self.context.account.peerId.toInt64(), peer: self.peerId.toInt64()).isEmpty && !data.availablePanes.contains(.gifts) { data.availablePanes.append(.gifts) }
             self.updateData(data)
             if let (layout, navigationHeight) = self.validLayout {
                 self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate, additive: false)
@@ -119,6 +121,7 @@ def apply(root):
 ''', 'appearance profile refresh')
     patch(root, peer_info + '/Sources/PeerInfoScreen.swift', appearance_refresh)
     def local_gift_tab(t):
+        t = replace(t, '    let availablePanes: [PeerInfoPaneKey]\n', '    var availablePanes: [PeerInfoPaneKey]\n', 'local gift tab live refresh')
         old = 'if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {'
         new = 'if (cachedData.starGiftsCount ?? 0) > 0 || !litvinLocalGifts(account: context.account.peerId.toInt64(), peer: peerView.peerId.toInt64()).isEmpty {'
         if new not in t:
@@ -126,6 +129,16 @@ def apply(root):
             t = t.replace(old, new)
         return t
     patch(root, peer_info + '/Sources/PeerInfoData.swift', local_gift_tab)
+
+    def gift_entry(t):
+        t = imported(t, 'LitvinSettings')
+        return replace(t, '    func openPremiumGift() {\n', '''    func openPremiumGift(local: Bool = true) {
+        if local, let giftPeer = self.data?.peer {
+            LitvinGiftCatalog.show(context: self.context, peer: giftPeer.id.toInt64(), realGift: { [weak self] in self?.openPremiumGift(local: false) })
+            return
+        }
+''', 'profile local gift catalog')
+    patch(root, peer_info + '/Sources/PeerInfoScreen.swift', gift_entry)
 
     def appearance_gifts(t):
         prefix, separator, t = t.partition('public final class ProfileGiftsContext {')
@@ -185,3 +198,4 @@ def apply(root):
 
 if __name__ == '__main__':
     apply(Path(sys.argv[1]))
+
