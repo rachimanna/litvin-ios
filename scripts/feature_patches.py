@@ -252,7 +252,7 @@ def apply(root):
                    !sourceMessage.media.contains(where: { $0 is TelegramMediaAction || $0 is TelegramMediaExpiredContent }),
                    LitvinPolicy.options.forwardScrub || (LitvinPolicy.options.forwardBypass && (sourceMessage.isCopyProtected() || transaction.getPeer(sourceId.peerId)?.isCopyProtectionEnabled == true || (transaction.getPeerCachedData(peerId: sourceId.peerId) as? CachedUserData)?.flags.contains(.copyProtectionEnabled) == true || (transaction.getPeerCachedData(peerId: sourceId.peerId) as? CachedUserData)?.flags.contains(.myCopyProtectionEnabled) == true)) {
                     let copyAttributes = sourceMessage.attributes.filter { $0 is TextEntitiesMessageAttribute }
-                    let reference = sourceMessage.media.first.map { AnyMediaReference.standalone(media: $0) }
+                    let reference = sourceMessage.media.first(where: { $0 is TelegramMediaImage || $0 is TelegramMediaFile }).map { AnyMediaReference.message(message: MessageReference(sourceMessage), media: $0) }
                     updatedMessages.append((transformedMedia, .message(text: sourceMessage.text, attributes: copyAttributes, inlineStickers: [:], mediaReference: reference, threadId: threadId, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: forwardGroupingKey(grouping: grouping, sourceGroupingKey: sourceMessage.groupingKey, generatedKeys: &localGroupingKeyBySourceKey), correlationId: nil, bubbleUpEmojiOrStickersets: [])))
                     continue outer
                 }
@@ -329,6 +329,195 @@ def apply(root):
 ''' + anchor, 'hidden push previews')
     patch(root, 'Telegram/NotificationService/Sources/NotificationService.swift', notification)
     patch(root, 'Telegram/NotificationService/BUILD', ui_build)
+
+    # Local appearance is confined to presentation. Never modify EnginePeer,
+    # StarsContext balances, account credentials or server entitlement checks.
+    peer_info = f'{UI}/Components/PeerInfo/PeerInfoScreen'
+    patch(root, peer_info + '/BUILD', lambda t: dependency(t))
+
+    def appearance_header(t):
+        t = imported(t)
+        t = replace(t, 'peer.isPremium && !premiumConfiguration.isPremiumDisabled && (peer.id != self.context.account.peerId || self.isSettings || self.isMyProfile)',
+            'LitvinAppearance.premium(account: self.context.account.peerId.toInt64(), peer: peer.id.toInt64(), original: peer.isPremium) && (!premiumConfiguration.isPremiumDisabled || LitvinAppearance.state(account: self.context.account.peerId.toInt64()).premium) && (peer.id != self.context.account.peerId || self.isSettings || self.isMyProfile)', 'local premium badge')
+        t = replace(t, '            isPremium = peer.isPremium\n', '            isPremium = LitvinAppearance.premium(account: self.context.account.peerId.toInt64(), peer: peer.id.toInt64(), original: peer.isPremium)\n', 'local premium title spacing')
+        return replace(t, '                var subtitle = formatPhoneNumber(context: self.context, number: user.phone ?? "")',
+            '                var subtitle = LitvinAppearance.phone(account: self.context.account.peerId.toInt64(), peer: user.id.toInt64(), original: formatPhoneNumber(context: self.context, number: user.phone ?? ""))', 'local settings phone')
+    patch(root, peer_info + '/Sources/PeerInfoHeaderNode.swift', appearance_header)
+
+    def appearance_profile(t):
+        t = imported(imported(t), 'LitvinSettings')
+        t = replace(t, '        if let phone = user.phone {\n            let formattedPhone = formatPhoneNumber(context: context, number: phone)',
+            '        if let phone = user.phone {\n            let formattedPhone = LitvinAppearance.phone(account: context.account.peerId.toInt64(), peer: user.id.toInt64(), original: formatPhoneNumber(context: context, number: phone))', 'local profile phone')
+        return replace(t, '        let ItemVerification = 9004\n', '''        let ItemVerification = 9004
+        items[.peerInfoTrailing]!.append(PeerInfoScreenActionItem(id: 19001, text: "Локальные NFT-подарки", action: {
+            LitvinAppearanceTools.showGifts(context: context, peer: user.id.toInt64())
+        }))
+''', 'profile gift manager')
+    patch(root, peer_info + '/Sources/PeerInfoProfileItems.swift', appearance_profile)
+
+    def appearance_phone_menu(t):
+        t = imported(t, 'LitvinSettings')
+        return replace(t, '            var items: [ContextMenuItem] = []\n', '''            var items: [ContextMenuItem] = []
+            if strongSelf.peerId == strongSelf.context.account.peerId {
+                items.append(.action(ContextMenuActionItem(text: "Изменить локальный номер", icon: { _ in nil }, action: { _, done in
+                    done(.default)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        LitvinAppearanceTools.editPhone(account: strongSelf.context.account.peerId.toInt64())
+                    }
+                })))
+            }
+''', 'phone local edit action')
+    patch(root, peer_info + '/Sources/PeerInfoScreenOpenPhone.swift', appearance_phone_menu)
+    patch(root, peer_info + '/Sources/PeerInfoScreenOpenPhone.swift', lambda t: replace(t,
+        'if gesture == nil, formattedPhoneNumber.hasPrefix("+888") {',
+        'if gesture == nil, formattedPhoneNumber.hasPrefix("+888"), self.peerId != self.context.account.peerId {', 'own collectible phone local menu'))
+
+    def appearance_phone_settings(t):
+        t = imported(t, 'LitvinSettings')
+        old = '''                let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
+                    if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
+                        navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
+                    }
+                })
+                push(introController)'''
+        return replace(t, old, '''                LitvinAppearanceTools.phoneMenu(account: self.context.account.peerId.toInt64(), changeReal: { [weak self] in
+                    guard let self else { return }
+                    let introController = PrivacyIntroController(context: self.context, mode: .changePhoneNumber(phoneNumber), proceedAction: { [weak self] in
+                        if let strongSelf = self, let navigationController = strongSelf.controller?.navigationController as? NavigationController {
+                            navigationController.replaceTopController(ChangePhoneNumberController(context: strongSelf.context), animated: true)
+                        }
+                    })
+                    self.controller?.push(introController)
+                })''', 'settings phone choice')
+    patch(root, peer_info + '/Sources/PeerInfoScreenSettingsActions.swift', appearance_phone_settings)
+
+    def appearance_settings(t):
+        t = imported(t)
+        t = replace(t, 'label: .text(user.phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? "")',
+            'label: .text(LitvinAppearance.phone(account: context.account.peerId.toInt64(), peer: user.id.toInt64(), original: user.phone.flatMap({ formatPhoneNumber(context: context, number: $0) }) ?? ""))', 'settings phone label')
+        t = replace(t, '    if let starsState = data.starsState {\n        if !isPremiumDisabled || abs(starsState.balance.value) > 0 {', '    if let starsState = data.starsState {\n        let litvinBalance = litvinDisplayStars(account: context.account.peerId.toInt64(), original: starsState.balance)\n        if !isPremiumDisabled || abs(litvinBalance.value) > 0 {', 'settings stars display')
+        t = t.replace('abs(starsState.balance.value)', 'abs(litvinBalance.value)')
+        return replace(t, 'formatStarsAmountText(starsState.balance, dateTimeFormat: presentationData.dateTimeFormat)', 'formatStarsAmountText(litvinBalance, dateTimeFormat: presentationData.dateTimeFormat)', 'settings stars amount')
+    patch(root, peer_info + '/Sources/PeerInfoSettingsItems.swift', appearance_settings)
+
+    def appearance_refresh(t):
+        t = imported(t)
+        t = replace(t, '    var canAttachVideo: Bool?\n', '    private var litvinAppearanceObserver: NSObjectProtocol?\n    var canAttachVideo: Bool?\n', 'appearance observer field')
+        t = replace(t, '        self.selectAddMemberDisposable.dispose()\n', '        if let litvinAppearanceObserver { NotificationCenter.default.removeObserver(litvinAppearanceObserver) }\n        self.selectAddMemberDisposable.dispose()\n', 'appearance observer disposal')
+        return replace(t, '    override func didLoad() {\n        super.didLoad()\n', '''    override func didLoad() {
+        super.didLoad()
+        self.litvinAppearanceObserver = NotificationCenter.default.addObserver(forName: LitvinAppearance.changed, object: nil, queue: .main) { [weak self] _ in
+            guard let self, let data = self.data else { return }
+            self.updateData(data)
+            if let (layout, navigationHeight) = self.validLayout {
+                self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate, additive: false)
+            }
+        }
+''', 'appearance profile refresh')
+    patch(root, peer_info + '/Sources/PeerInfoScreen.swift', appearance_refresh)
+    def local_gift_tab(t):
+        old = 'if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {'
+        new = 'if (cachedData.starGiftsCount ?? 0) > 0 || !litvinLocalGifts(account: context.account.peerId.toInt64(), peer: peerView.peerId.toInt64()).isEmpty {'
+        if new not in t:
+            if t.count(old) != 2: raise RuntimeError('user gift tab anchors changed')
+            t = t.replace(old, new)
+        return t
+    patch(root, peer_info + '/Sources/PeerInfoData.swift', local_gift_tab)
+
+    def appearance_gifts(t):
+        prefix, separator, t = t.partition('public final class ProfileGiftsContext {')
+        t, end_separator, suffix = t.partition('// MARK: - CraftGiftsContext')
+        if not separator or not end_separator: raise RuntimeError('ProfileGiftsContext boundaries changed')
+        t = replace(t, '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n', '    private let impl: QueueLocalObject<ProfileGiftsContextImpl>\n    private let litvinAccountId: Int64\n', 'gift presentation account')
+        t = replace(t, '            return ProfileGiftsContextImpl(queue: queue, account: account, peerId: peerId, collectionId: collectionId, sorting: sorting, filter: filter, limit: limit)\n', '            return ProfileGiftsContextImpl(queue: queue, account: account, peerId: peerId, collectionId: collectionId, sorting: sorting, filter: filter, limit: limit)\n', 'profile gift impl')
+        anchor = '        let queue = self.queue\n        self.impl = QueueLocalObject(queue: queue, generate: {\n            return ProfileGiftsContextImpl'
+        t = replace(t, anchor, '        self.litvinAccountId = account.peerId.toInt64()\n' + anchor, 'gift presentation account init')
+        old = '''                disposable.set(impl.state.start(next: { value in
+                    subscriber.putNext(value)
+                }))'''
+        new = '''                disposable.set((combineLatest(impl.state, litvinAppearanceUpdates())
+                |> deliverOnMainQueue).start(next: { value, _ in
+                    subscriber.putNext(litvinProfileGifts(account: impl.account.peerId.toInt64(), peer: impl.peerId.toInt64(), collection: impl.collectionId, state: value))
+                }))'''
+        # Capture immutable wrapper values; the impl's account fields are private.
+        new = new.replace('impl.account.peerId.toInt64()', 'litvinAccount').replace('impl.peerId.toInt64()', 'litvinPeer').replace('impl.collectionId', 'litvinCollection')
+        t = replace(t, '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        return Signal { subscriber in', '    public var state: Signal<ProfileGiftsContext.State, NoError> {\n        let litvinAccount = self.litvinAccountId\n        let litvinPeer = self.peerId.toInt64()\n        let litvinCollection = self.collectionId\n        return Signal { subscriber in', 'gift state context')
+        t = replace(t, old, new, 'local profile gift state')
+        t = replace(t, '            state = impl._state\n', '            state = impl._state.map { litvinProfileGifts(account: self.litvinAccountId, peer: self.peerId.toInt64(), collection: self.collectionId, state: $0) }\n', 'local gift current state')
+        return prefix + separator + t + end_separator + suffix
+    patch(root, f'{CORE}/Sources/TelegramEngine/Payments/StarGifts.swift', appearance_gifts)
+
+    # Local gift previews do not enter sell/transfer/wear/purchase controllers.
+    def local_gift_taps(t):
+        anchor = '''                                if self.canSelect {
+                                    if self.selectedItemIds.contains(itemReferenceId) {'''
+        t = replace(t, anchor, '''                                if litvinIsLocalGift(product) {
+                                    self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: "Локальный подарок", text: "Оформление видно только на этом устройстве. Управление — в профиле: Локальные NFT-подарки.", timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: false, action: { _ in false }), in: .current)
+                                    return
+                                }
+''' + anchor, 'local gift tap isolation')
+        return replace(t, '(self.starsProducts ?? []).map { .profileGift(self.peerId, $0) }', '(self.starsProducts ?? []).filter { !litvinIsLocalGift($0) }.map { .profileGift(self.peerId, $0) }', 'local gift swipe isolation')
+    gifts_ui = f'{UI}/Components/PeerInfo/PeerInfoVisualMediaPaneNode'
+    patch(root, gifts_ui + '/Sources/GiftsListView.swift', local_gift_taps)
+    patch(root, gifts_ui + '/Sources/PeerInfoGiftsPaneNode.swift', lambda t: replace(t,
+        '    private func contextAction(gift: ProfileGiftsContext.State.StarGift, view: UIView, gesture: ContextGesture) {\n',
+        '''    private func contextAction(gift: ProfileGiftsContext.State.StarGift, view: UIView, gesture: ContextGesture) {
+        if litvinIsLocalGift(gift) { return }
+''', 'local gift context isolation'))
+
+    stars_ui = f'{UI}/Components/Stars/StarsTransactionsScreen'
+    patch(root, stars_ui + '/BUILD', lambda t: dependency(t))
+    def appearance_stars(t):
+        t = imported(t)
+        t = replace(t, '        private var previousBalance: StarsAmount?\n', '        private var previousBalance: StarsAmount?\n        private var litvinAppearanceObserver: NSObjectProtocol?\n', 'stars appearance observer')
+        t = replace(t, '            super.init(frame: frame)\n', '''            super.init(frame: frame)
+            self.litvinAppearanceObserver = NotificationCenter.default.addObserver(forName: LitvinAppearance.changed, object: nil, queue: .main) { [weak self] _ in
+                self?.state?.updated(transition: .immediate)
+            }
+''', 'stars live appearance refresh')
+        t = replace(t, 'formattedBalance = formatStarsAmountText(self.starsState?.balance ?? StarsAmount.zero, dateTimeFormat: environment.dateTimeFormat)', 'formattedBalance = formatStarsAmountText(litvinDisplayStars(account: component.context.account.peerId.toInt64(), original: self.starsState?.balance ?? StarsAmount.zero), dateTimeFormat: environment.dateTimeFormat)', 'my stars top balance')
+        t = replace(t, '                            count: self.starsState?.balance ?? StarsAmount.zero,', '                            count: litvinDisplayStars(account: component.context.account.peerId.toInt64(), original: self.starsState?.balance ?? StarsAmount.zero, enabled: !component.starsContext.ton),', 'my stars balance')
+        return replace(t, '        deinit {\n            self.stateDisposable?.dispose()', '        deinit {\n            if let litvinAppearanceObserver { NotificationCenter.default.removeObserver(litvinAppearanceObserver) }\n            self.stateDisposable?.dispose()', 'stars observer disposal')
+    patch(root, stars_ui + '/Sources/StarsTransactionsScreen.swift', appearance_stars)
+
+    patch(root, f'{UI}/Sources/ChatHistoryEntriesForView.swift', lambda t: replace(t,
+        '    if isMusicPlaylist && entries.count == 1 {\n',
+        '    entries = litvinInsertDeletedEntries(entries, context: context, location: location, subject: subject, view: view, presentationData: presentationData, chatPeer: chatPeer)\n\n    if isMusicPlaylist && entries.count == 1 {\n', 'inline deleted chat entries'))
+    patch(root, f'{UI}/Sources/Chat/ChatControllerOpenMessageContextMenu.swift', lambda t: replace(t,
+        '    func openMessageContextMenu(message: EngineMessage, selectAll: Bool, node: ASDisplayNode, frame: CGRect, anyRecognizer: UIGestureRecognizer?, location: CGPoint?) -> Void {\n',
+        '    func openMessageContextMenu(message: EngineMessage, selectAll: Bool, node: ASDisplayNode, frame: CGRect, anyRecognizer: UIGestureRecognizer?, location: CGPoint?) -> Void {\n        if message._asMessage().attributes.contains(where: { $0 is LitvinDeletedMessageAttribute }) { return }\n', 'deleted entries never issue actions'))
+    patch(root, f'{UI}/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift', lambda t: replace(t,
+        '        strongSelf.appliedItem = item\n',
+        '''        strongSelf.appliedItem = item
+        let litvinDeleted = item.content.firstMessage.attributes.contains(where: { $0 is LitvinDeletedMessageAttribute })
+        strongSelf.mainContainerNode.alpha = litvinDeleted ? 0.6 : 1.0
+        strongSelf.mainContainerNode.isUserInteractionEnabled = !litvinDeleted
+''', 'deleted bubble opacity'))
+
+    def login_brand(t):
+        prefix, separator, t = t.partition('final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {')
+        if not separator: raise RuntimeError('login node boundary changed')
+        t = replace(t, '    private let titleNode: ASTextNode\n', '    private let titleNode: ASTextNode\n    private let litvinLogoNode = ASImageNode()\n', 'login logo node')
+        t = replace(t, '        self.titleNode = ASTextNode()\n', '        self.titleNode = ASTextNode()\n        self.litvinLogoNode.image = litvinBrandMark()\n        self.litvinLogoNode.displaysAsynchronously = false\n        self.litvinLogoNode.accessibilityLabel = "Gram"\n        self.litvinLogoNode.isAccessibilityElement = true\n', 'login logo image')
+        t = replace(t, '        self.addSubnode(self.titleNode)\n', '        self.addSubnode(self.titleNode)\n        self.addSubnode(self.litvinLogoNode)\n', 'login logo hierarchy')
+        t = replace(t, 'AuthorizationLayoutItem(node: self.animationNode, size: animationSize,', 'AuthorizationLayoutItem(node: self.litvinLogoNode, size: animationSize,', 'login logo layout')
+        t = replace(t, '            self.animationNode.isHidden = false\n', '            self.animationNode.isHidden = true\n            self.litvinLogoNode.isHidden = false\n', 'login logo visibility')
+        t = replace(t, '            self.proceedNode.isHidden = true\n', '            self.proceedNode.isHidden = true\n            self.litvinLogoNode.isHidden = true\n', 'compact login logo visibility')
+        return prefix + separator + t
+    patch(root, 'submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift', login_brand)
+
+    def gallery_capture(t):
+        t = imported(t)
+        old = 'message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected'
+        new = '((message.isCopyProtected() || peerIsCopyProtected) && !LitvinPolicy.options.screenshotBypass) || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil'
+        if new not in t:
+            if t.count(old) != 2: raise RuntimeError('gallery video capture anchors changed')
+            t = t.replace(old, new)
+        # Photo item protection follows the effective peer flag; secret/paid and
+        # one-time media retain their separate protection predicates above.
+        return replace(t, '    let message = entry.entry.message\n    let location = entry.location ?? entry.entry.location\n',
+            '    let message = entry.entry.message\n    let peerIsCopyProtected = peerIsCopyProtected && !(LitvinPolicy.options.screenshotBypass && message.id.peerId.namespace != Namespaces.Peer.SecretChat && !message.containsSecretMedia && message.paidContent == nil)\n    let location = entry.location ?? entry.entry.location\n', 'gallery effective capture flag')
+    patch(root, 'submodules/GalleryUI/Sources/GalleryController.swift', gallery_capture)
 
 
 if __name__ == '__main__':

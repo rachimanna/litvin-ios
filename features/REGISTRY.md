@@ -26,3 +26,7 @@ The active implementation is in LitvinCore, LitvinSettings and overlay/submodule
 | ESign distribution | Manual Publish IPA for ESign action, source/checksum generation and in-app installation help |
 
 No AI module is enabled or added. Local data is partitioned by account. Features that preserve content begin collecting only after opt-in. See README for behavior limits and installation steps.
+
+## Local appearance (0.3.0)
+
+LitvinAppearance stores account-separated Premium styling, a display-only phone value, a display-only Stars balance and per-peer NFT gift selections. Profile/header and My Stars patches read these values only for rendering. Native entitlement, credentials, payment balances and gift mutation RPCs are unchanged. NFT entries use original getUniqueStarGift artwork, persist locally, and are excluded from transactional UI. Settings titles have no emoji.

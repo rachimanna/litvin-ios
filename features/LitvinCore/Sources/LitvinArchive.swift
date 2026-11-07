@@ -109,7 +109,9 @@ public final class LitvinArchive {
         guard options.saveDeleted || options.saveEditHistory || options.channelDigest || options.contactProfile else { return }
         queue.async {
             if let previous = self.state.messages[record.key], previous.text == record.text, previous.deleted == record.deleted { return }
-            self.state.messages[record.key] = record
+            var captured = record
+            if self.state.messages[record.key]?.deleted == true { captured.deleted = true }
+            self.state.messages[record.key] = captured
             self.trim()
             self.saveSoon()
         }

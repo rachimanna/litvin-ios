@@ -1,14 +1,2 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#D01030"/>
-      <stop offset="1" stop-color="#8B0A1F"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#bg)"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="88" stroke-linecap="square" stroke-linejoin="miter">
-    <path d="M 240 792 L 512 240 L 784 792"/>
-    <path d="M 344 584 L 680 584"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F12C54"/><stop offset="1" stop-color="#6628B8"/></linearGradient></defs><rect width="1024" height="1024" fill="url(#bg)"/><path d="M690 345 C612 258 472 248 371 317 C250 400 238 568 326 672 C409 773 566 787 674 706 C705 683 724 652 734 618 L734 520 L540 520" fill="none" stroke="white" stroke-width="88" stroke-linecap="round" stroke-linejoin="round"/><path d="M570 405 L819 230 L746 468 L690 393 L570 405Z" fill="white"/></svg>

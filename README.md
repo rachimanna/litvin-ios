@@ -10,7 +10,7 @@ Open Settings → Litvin. Privacy and collection controls are off by default; lo
 - Sponsored-message suppression. Reopen an existing chat after changing the control.
 - Screenshot controls for copy-protected cloud chats. Secret-chat and verification-code protection remains in place.
 - Copy-protected cloud messages can be copied into fresh outgoing messages. The optional scrub control removes forwarding attribution and reply references.
-- Local deleted-text archive and edit history with a text difference view. Only text observed by this client after collection is enabled can be recorded. Media and secret-chat content are not copied into this archive.
+- Local deleted-text archive and edit history with a text difference view. Saved deleted text also appears as a faded «Удалено» bubble at its timestamp in ordinary peer chats. These are non-interactive presentation entries, not messages restored on Telegram. Secret chats, forum/topic views, filtered views and encrypted archive peers are excluded from inline rendering. Only text observed by this client after collection is enabled can be recorded. Media and secret-chat content are not copied into this archive.
 - Message notes, tags, colors and local reminders. Use a message's long-press menu. Nothing is synchronized through Saved Messages.
 - Digest of selected channels using locally observed posts, ranked by recency with a small text-length bonus.
 - Contact timeline from observed messages and explicit online/offline updates, including counts and your median response time. This is not a complete account history or a background tracker.
@@ -19,6 +19,11 @@ Open Settings → Litvin. Privacy and collection controls are off by default; lo
 - Encrypted export/import of Litvin settings, local data, encrypted vault files, Telegram folders, theme settings, installed sticker-pack references, proxies and pinned chats. Import is restricted to the same account and asks before applying changes. Folder, pin and sticker changes synchronize through Telegram. Session credentials and login keys are excluded. Wallpaper/media files themselves are not embedded.
 - Proxy pool based on Telegram's MTProto connectivity checks and round-trip times, with failover to a reachable saved proxy. Add only servers you trust; no third-party proxy feed is downloaded.
 - Clean media export from the message menu: JPEG re-rendering, video re-encoding without source metadata, and optional pitch-shifted voice export. Media must already be downloaded. Voice processing does not guarantee anonymity.
+- Local Premium appearance in your own profile, without changing server entitlements.
+- A local display number: tap your number and choose «Изменить локальный номер». The login number and account recovery remain unchanged.
+- A configurable local balance in My Stars and the settings row. Payment and purchase flows continue to use the real StarsContext balance; TON balances are unchanged.
+- Local NFT gifts: choose a contact or open their profile, then add an existing t.me/nft link. Telegram supplies the original model/artwork; the client stores the choice per account and peer and adds it to the profile gift grid. These entries cannot be sold, transferred, worn, purchased or selected for collections. Remove them in «Локальные NFT-подарки». Reopen a previously empty profile to reveal its gift tab.
+- Settings feature names use plain text without emoji.
 - An explicitly local gift demo, visible only on your screen, with no payment or gift RPC.
 
 One-time media viewing suppresses this client's consumed-content notification and gallery timeout UI. It cannot reverse expiry or deletion already performed by Telegram or another client.
@@ -54,7 +59,7 @@ python3 build-system/Make/Make.py build \
     --buildNumber=1 --configuration=release_arm64
 ```
 
-The IPA is produced at tg-ios/bazel-bin/Telegram/Telegram.ipa. GitHub Actions uploads it as Litvin.ipa. This is a test-signed build using upstream's ph.telegra.Telegraph identity; AltStore / SideStore or your own Apple signing setup must re-sign it for installation. The on-device name and icon are Litvin.
+The IPA is produced at tg-ios/bazel-bin/Telegram/Telegram.ipa. GitHub Actions uploads it as Litvin.ipa. This is a test-signed build using upstream's ph.telegra.Telegraph identity; AltStore / SideStore or your own Apple signing setup must re-sign it for installation. The on-device name is Litvin; the new Gram G-and-wing mark is installed as the app icon and shown on the phone-entry screen. branding/avatar.svg is the matching avatar.
 
 ## ESign distribution
 

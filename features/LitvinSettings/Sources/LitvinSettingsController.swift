@@ -9,7 +9,7 @@ import ItemListUI
 import PresentationDataUtils
 import LitvinCore
 
-public let litvinVersion = "0.2.0"
+public let litvinVersion = "0.3.0"
 
 private final class LitvinArguments {
     let toggle: (String, Bool) -> Void
@@ -61,6 +61,10 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
     let refresh = ValuePromise<Int>(0, ignoreRepeated: false)
     var revision = 0
     let args = LitvinArguments(toggle: { key, value in
+        if key == "localPremium" {
+            LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.premium = value }
+            revision += 1; refresh.set(revision); return
+        }
         guard let row = toggles.first(where: { $0.0 == key }) else { return }
         LitvinPolicy.update { $0[keyPath: row.2] = value }
         revision += 1
@@ -69,9 +73,9 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         LitvinTools.open(key, context: context)
     })
 
-    let state = combineLatest(context.sharedContext.presentationData, refresh.get())
+    let state = combineLatest(context.sharedContext.presentationData, refresh.get(), litvinAppearanceUpdates())
     |> deliverOnMainQueue
-    |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let options = LitvinPolicy.options
         let headings = ["ПРИВАТНОСТЬ", "СООБЩЕНИЯ", "ЛОКАЛЬНЫЕ ДАННЫЕ", "ИНСТРУМЕНТЫ"]
         var entries: [LitvinEntry] = []
@@ -92,6 +96,8 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
                 add("Мои заметки", key: "notes", section: section)
             }
             if section == 3 {
+                add("Локальный Premium", key: "localPremium", value: LitvinAppearance.state(account: context.account.peerId.toInt64()).premium, section: section)
+                add("Локальное оформление, номер и подарки", key: "appearance", section: section)
                 for row in [("Каналы дайджеста", "channels"), ("Дайджест", "digest"), ("Статистика контактов", "contacts"), ("Скрытые чаты и PIN", "hidden"), ("Шифрованный локальный архив", "vault"), ("Пул прокси", "proxies"), ("Экспорт / импорт", "backup"), ("Установка через ESign", "esign"), ("О Litvin", "about")] {
                     add(row.0, key: row.1, section: section)
                 }

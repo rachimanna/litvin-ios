@@ -5,6 +5,21 @@ import Foundation
         let account = Int64.random(in: 100_000_000...999_999_999)
         let original = LitvinPolicy.options
         defer { LitvinPolicy.replace(original); LitvinArchive.forAccount(account).clear() }
+        defer { LitvinAppearance.reset(account: account); LitvinAppearance.reset(account: account + 1) }
+        precondition(LitvinAppearance.state(account: account) == LitvinAppearanceState())
+        precondition(LitvinAppearance.update(account: account) { $0.premium = true; $0.phone = "+123456789"; $0.stars = 123456789 })
+        precondition(LitvinAppearance.premium(account: account, peer: account, original: false))
+        precondition(!LitvinAppearance.premium(account: account, peer: account + 1, original: false))
+        precondition(LitvinAppearance.phone(account: account, peer: account, original: "real") == "+123456789")
+        precondition(LitvinAppearance.phone(account: account, peer: account + 1, original: "real") == "real")
+        precondition(LitvinAppearance.state(account: account + 1) == LitvinAppearanceState())
+        precondition(!LitvinAppearance.update(account: account) { $0.stars = -1 })
+        precondition(!LitvinAppearance.update(account: account) { $0.phone = "bad\nnumber" })
+        precondition(LitvinAppearance.state(account: account).stars == 123456789)
+        precondition(LitvinAppearance.update(account: account) { $0.gifts["42"] = ["Test-1": Data([1, 2, 3])] })
+        precondition(LitvinAppearance.state(account: account).gifts["42"]?["Test-1"] == Data([1, 2, 3]))
+        LitvinAppearance.reset(account: account)
+        precondition(LitvinAppearance.state(account: account) == LitvinAppearanceState())
         LitvinPolicy.replace(LitvinOptions())
         precondition(!LitvinPolicy.ghostActive)
         LitvinPolicy.update { $0.ghostMode = true; $0.alibiEnabled = true; $0.alibiStartMinute = 0; $0.alibiEndMinute = 0 }
@@ -36,6 +51,8 @@ import Foundation
         precondition(state.messages[direct.key]?.deleted == true)
         precondition(state.messages[channel.key]?.deleted == false, "Global deletion must not match channel message IDs")
         precondition(state.edits[direct.key]?.first?.text == "before")
+        store.observe(direct)
+        precondition(store.snapshot().messages[direct.key]?.deleted == true, "Stale loaded history must not clear a deletion marker")
         let export = try store.exportData()
         try store.importData(export)
         precondition(store.snapshot().messages.count == 2)

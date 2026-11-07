@@ -19,6 +19,7 @@ final class LitvinRowsController: UITableViewController {
     var documentHandler: ((URL) -> Void)?
     var protectedAccount: Int64?
     private var observer: NSObjectProtocol?
+    private var appearanceObserver: NSObjectProtocol?
     private var resignObserver: NSObjectProtocol?
     private var activeObserver: NSObjectProtocol?
 
@@ -39,10 +40,11 @@ final class LitvinRowsController: UITableViewController {
                 self.close()
             } else { self.reload(); self.tableView.isHidden = false }
         }
+        appearanceObserver = NotificationCenter.default.addObserver(forName: LitvinAppearance.changed, object: nil, queue: .main) { [weak self] _ in self?.reload() }
         reload()
     }
     deinit {
-        for observer in [observer, resignObserver, activeObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
+        for observer in [observer, appearanceObserver, resignObserver, activeObserver].compactMap({ $0 }) { NotificationCenter.default.removeObserver(observer) }
     }
     func reload() { if let refresh { rows = refresh() }; tableView.reloadData() }
     @objc private func close() { dismiss(animated: true, completion: { [weak self] in self?.releaseRows() }) }
@@ -165,6 +167,7 @@ public enum LitvinTools {
         }
         let store = LitvinArchive.forAccount(account)
         switch key {
+        case "appearance": LitvinAppearanceTools.show(context: context)
         case "schedule": schedule()
         case "deleted": records(title: "Удалённые сообщения", account: account, source: { store.snapshot().messages.values.filter { $0.deleted }.sorted { $0.timestamp > $1.timestamp } })
         case "edits": records(title: "История правок", account: account, source: { store.snapshot().edits.values.flatMap { $0 }.sorted { $0.capturedAt > $1.capturedAt } })
