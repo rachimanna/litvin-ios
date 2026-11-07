@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.3.0"
+public let litvinVersion = "1.4.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -18,8 +18,9 @@ private final class LitvinSettingsArguments {
     let openVoiceChanger: () -> Void
     let openPlugins: () -> Void
     let openSource: () -> Void
+    let openAppearance: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openPlugins: @escaping () -> Void, openSource: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openPlugins: @escaping () -> Void, openSource: @escaping () -> Void, openAppearance: @escaping () -> Void) {
         self.toggle = toggle
         self.toggleGhost = toggleGhost
         self.toggleAutoReply = toggleAutoReply
@@ -27,6 +28,7 @@ private final class LitvinSettingsArguments {
         self.openVoiceChanger = openVoiceChanger
         self.openPlugins = openPlugins
         self.openSource = openSource
+        self.openAppearance = openAppearance
     }
 }
 
@@ -55,8 +57,9 @@ private struct LitvinSettingsState: Equatable {
     var autoReply: Bool
     var autoReplyText: String
     var pluginsCount: Int
+    var localPremium: Bool
 
-    static func current() -> LitvinSettingsState {
+    static func current(account: Int64) -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
         return LitvinSettingsState(
             ghostMode: LitvinFlags.ghostMode,
@@ -71,7 +74,8 @@ private struct LitvinSettingsState: Equatable {
             localTranscription: LitvinFlags.localTranscription,
             autoReply: LitvinFlags.autoReply,
             autoReplyText: LitvinFlags.autoReplyText,
-            pluginsCount: LitvinPluginManager.shared.allPlugins().count
+            pluginsCount: LitvinPluginManager.shared.allPlugins().count,
+            localPremium: LitvinAppearance.state(account: account).premium
         )
     }
 }
@@ -89,6 +93,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     case extrasHeader(String)
     case extraSwitch(Int32, String, String, Bool)
     case extrasInfo(String)
+    case appearance(String)
     case autoReplyHeader(String)
     case autoReply(String, Bool)
     case autoReplyText(String)
@@ -115,7 +120,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return LitvinSettingsSection.plugins.rawValue
         case .messagesHeader, .keepDeleted, .keepDeletedInfo:
             return LitvinSettingsSection.messages.rawValue
-        case .extrasHeader, .extraSwitch, .extrasInfo:
+        case .extrasHeader, .extraSwitch, .extrasInfo, .appearance:
             return LitvinSettingsSection.extras.rawValue
         case .autoReplyHeader, .autoReply, .autoReplyText, .autoReplyInfo:
             return LitvinSettingsSection.autoReply.rawValue
@@ -140,6 +145,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
         case .extrasHeader: return 20
         case let .extraSwitch(index, _, _, _): return 21 + index
         case .extrasInfo: return 39
+        case .appearance: return 38
         case .autoReplyHeader: return 40
         case .autoReply: return 41
         case .autoReplyText: return 42
@@ -192,6 +198,9 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return false
         case let .extraSwitch(a1, a2, a3, a4):
             if case let .extraSwitch(b1, b2, b3, b4) = rhs { return a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4 }
+            return false
+        case let .appearance(a):
+            if case let .appearance(b) = rhs { return a == b }
             return false
         case let .extrasInfo(a):
             if case let .extrasInfo(b) = rhs { return a == b }
@@ -265,6 +274,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             })
         case let .ghostInfo(text), let .voiceInfo(text), let .pluginsInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .appearance(title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: self.section, style: .blocks, action: { arguments.openAppearance() })
         case let .extraSwitch(_, key, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
@@ -313,27 +324,29 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
 private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSettingsEntry] {
     return [
-        .ghostMode("👻 Призрачный режим", state.ghostMode),
+        .ghostMode("Призрачный режим", state.ghostMode),
         .ghostInfo("Собеседники не видят, что ты прочитал сообщения, печатаешь, прослушал голосовое или был онлайн. Если ты сам отправишь сообщение, Telegram покажет тебя в сети."),
-        .voiceChanger("🎙 Смена голоса", state.voicePreset),
+        .voiceChanger("Смена голоса", state.voicePreset),
         .voiceInfo("Злой, девушка, мужчина, ребёнок, пиксель, робот, вокал. Включается один раз — и работает в голосовых, звонках и групповых звонках. Можно менять прямо во время звонка."),
-        .plugins("🧩 Плагины", state.pluginsCount == 0 ? "Нет" : "\(state.pluginsCount)"),
+        .plugins("Плагины", state.pluginsCount == 0 ? "Нет" : "\(state.pluginsCount)"),
         .pluginsInfo("Свои команды и автозамены в сообщениях. Нажми на файл плагина в чате — и запусти его в Litvin."),
         .messagesHeader("СООБЩЕНИЯ"),
-        .keepDeleted("🗑 Удалённые сообщения", state.keepDeleted),
+        .keepDeleted("Удалённые сообщения", state.keepDeleted),
         .keepDeletedInfo("Если собеседник удалит сообщение, оно останется в чате, станет немного прозрачным и получит пометку «удалено» рядом со временем."),
         .extrasHeader("ЕЩЁ"),
-        .extraSwitch(0, LitvinFlags.antiAdsKey, "🚫 Без рекламы в каналах", state.antiAds),
-        .extraSwitch(1, LitvinFlags.editHistoryKey, "✏️ История правок", state.editHistory),
-        .extraSwitch(2, LitvinFlags.localTranscriptionKey, "📝 Голосовые в текст", state.localTranscription),
-        .extraSwitch(3, LitvinFlags.confettiKey, "🎉 Конфетти", state.confetti),
-        .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или 🎉. Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
+        .extraSwitch(0, LitvinFlags.antiAdsKey, "Без рекламы в каналах", state.antiAds),
+        .extraSwitch(1, LitvinFlags.editHistoryKey, "История правок", state.editHistory),
+        .extraSwitch(2, LitvinFlags.localTranscriptionKey, "Голосовые в текст", state.localTranscription),
+        .extraSwitch(3, LitvinFlags.confettiKey, "Конфетти", state.confetti),
+        .extraSwitch(4, "litvin.localPremium", "Локальный Premium", state.localPremium),
+        .appearance("Локальный номер, звёзды и NFT-подарки"),
+        .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или . Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
         .autoReplyHeader("АВТООТВЕТ"),
-        .autoReply("💬 Автоответ в личных чатах", state.autoReply),
+        .autoReply("Автоответ в личных чатах", state.autoReply),
         .autoReplyText(state.autoReplyText),
         .autoReplyInfo("Пока включено, каждому, кто напишет в личку, придёт этот текст (не чаще раза в 30 минут одному человеку). Работает, пока Litvin запущен."),
         .privacyHeader("ЗАЩИЩЁННЫЕ ЧАТЫ"),
-        .unlimitedViewOnce("♾ Одноразовые медиа без лимита", state.unlimitedViewOnce),
+        .unlimitedViewOnce("Одноразовые медиа без лимита", state.unlimitedViewOnce),
         .unlimitedViewOnceInfo("Фото, видео, кружки и голосовые «просмотр один раз» можно открывать сколько угодно — они не исчезают и не отмечаются просмотренными."),
         .aboutHeader("LITVIN"),
         .version("Версия", litvinVersion),
@@ -343,19 +356,23 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
 }
 
 public func litvinSettingsController(context: AccountContext) -> ViewController {
-    let statePromise = ValuePromise(LitvinSettingsState.current(), ignoreRepeated: true)
+    let statePromise = ValuePromise(LitvinSettingsState.current(account: context.account.peerId.toInt64()), ignoreRepeated: true)
     var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = LitvinSettingsArguments(toggle: { key, value in
+        if key == "litvin.localPremium" {
+            LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.premium = value }
+            statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64())); return
+        }
         LitvinFlags.setEnabled(key, value)
         NotificationCenter.default.post(name: Notification.Name("LitvinFlagsChanged"), object: nil)
-        statePromise.set(LitvinSettingsState.current())
+        statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64()))
     }, toggleGhost: { value in
         LitvinFlags.setGhostMode(value)
-        statePromise.set(LitvinSettingsState.current())
+        statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64()))
     }, toggleAutoReply: { value in
         LitvinFlags.setAutoReply(value)
-        statePromise.set(LitvinSettingsState.current())
+        statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64()))
     }, updateAutoReplyText: { value in
         LitvinFlags.setAutoReplyText(value)
     }, openVoiceChanger: {
@@ -366,11 +383,14 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         if let url = URL(string: "https://github.com/rachimanna/litvin-ios") {
             UIApplication.shared.open(url)
         }
+    }, openAppearance: {
+        LitvinAppearanceTools.show(context: context)
     })
 
-    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get())
+    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get(), litvinAppearanceUpdates())
     |> deliverOnMainQueue
-    |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let state = LitvinSettingsState.current(account: context.account.peerId.toInt64())
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Litvin"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: litvinSettingsEntries(state: state), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
@@ -378,7 +398,7 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
 
     let controller = ItemListController(context: context, state: signal)
     controller.didAppear = { _ in
-        statePromise.set(LitvinSettingsState.current())
+        statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64()))
     }
     pushControllerImpl = { [weak controller] c in
         (controller?.navigationController as? NavigationController)?.pushViewController(c)
