@@ -83,23 +83,23 @@ private enum LitvinPluginsEntry: ItemListNodeEntry {
         case .empty:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Плагинов пока нет. Нажми на файл плагина в любом чате или добавь его ниже."), sectionId: self.section)
         case let .pluginSwitch(_, info):
-            return ItemListSwitchItem(presentationData: presentationData, title: "🧩 \(info.name)", value: info.enabled, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("puzzlepiece.extension.fill", .green), title: info.name, value: info.enabled, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(info.id, value)
             })
         case let .pluginInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .pluginDelete(_, info):
-            return ItemListActionItem(presentationData: presentationData, title: "🗑 Удалить", kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Удалить", kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.remove(info.id)
             })
         case .addHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ДОБАВИТЬ", sectionId: self.section)
         case .add:
-            return ItemListActionItem(presentationData: presentationData, title: "➕ Добавить плагин из Файлов", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Добавить плагин из Файлов", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.add()
             })
         case .example:
-            return ItemListActionItem(presentationData: presentationData, title: "✨ Установить пример «Litvin Tools»", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Установить пример «Litvin Tools»", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.installExample()
             })
         case .addInfo:

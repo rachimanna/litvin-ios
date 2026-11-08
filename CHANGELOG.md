@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] — 2026-11-08
+- Settings → Litvin redesigned in the iOS 26 style: glass cards, a Litvin header row and colored SF Symbol icons on every row instead of emoji. The voice, plugins and chat statistics screens use the same style.
+- Back on the working Telegram-iOS 13.0.0 / macos-latest build configuration (main had been left on 13.1.2 / xcode-27, which does not build).
+- Not included: the local Premium, display phone number, Stars balance and NFT profile gifts from commits 4571856 and 75b8735. They show account data that is not real.
+- Chat lock and translate-on-send drafts moved to drafts/ (not compiled yet).
+
 ## [1.3.0] — 2026-11-07
 - Stays on Telegram-iOS 13.0.0 (build #24). A move to 13.1.2 on GitHub's xcode-27 runner was tried (builds #25, #26) and postponed; the 13.1 compatibility fixes (edit-history hook, Postbox lint allow-list, stub modules excluded) are kept. 13.2 is not buildable from public sources: its tgcalls submodule commit is not published.
 - Edit history patch supports the new mergedServerMessageUpdate path of 13.1+.
