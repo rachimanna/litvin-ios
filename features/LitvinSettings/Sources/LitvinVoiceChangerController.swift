@@ -80,7 +80,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
         case .presetsHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ГОЛОС", sectionId: self.section)
         case let .preset(preset, selected):
-            return ItemListCheckboxItem(presentationData: presentationData, title: preset.title, style: .left, checked: selected, zeroSeparatorInsets: false, sectionId: self.section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: preset.title, style: .left, checked: selected, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 arguments.update { $0.preset = preset }
             })
         case .tuningHeader:
@@ -104,7 +104,7 @@ private enum LitvinVoiceEntry: ItemListNodeEntry {
                 arguments.update { $0.echo = Double(value) }
             })
         case .reset:
-            return ItemListActionItem(presentationData: presentationData, title: "Сбросить ползунки", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: "Сбросить ползунки", kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.reset()
             })
         case .tuningInfo:

@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.4.2"
+public let litvinVersion = "1.5.0"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -33,6 +33,7 @@ private final class LitvinSettingsArguments {
 }
 
 private enum LitvinSettingsSection: Int32 {
+    case header
     case ghost
     case voice
     case plugins
@@ -83,6 +84,7 @@ private struct LitvinSettingsState: Equatable {
 }
 
 private enum LitvinSettingsEntry: ItemListNodeEntry {
+    case header(String)
     case ghostMode(String, Bool)
     case ghostInfo(String)
     case voiceChanger(String, String)
@@ -114,6 +116,8 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
+        case .header:
+            return LitvinSettingsSection.header.rawValue
         case .ghostMode, .ghostInfo:
             return LitvinSettingsSection.ghost.rawValue
         case .voiceChanger, .voiceInfo:
@@ -135,6 +139,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
+        case .header: return -1
         case .ghostMode: return 0
         case .ghostInfo: return 1
         case .voiceChanger: return 2
@@ -168,6 +173,9 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
     static func ==(lhs: LitvinSettingsEntry, rhs: LitvinSettingsEntry) -> Bool {
         switch lhs {
+        case let .header(a):
+            if case let .header(b) = rhs { return a == b }
+            return false
         case let .ghostMode(a1, a2):
             if case let .ghostMode(b1, b2) = rhs { return a1 == b1 && a2 == b2 }
             return false
@@ -262,32 +270,34 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! LitvinSettingsArguments
         switch self {
+        case let .header(value):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinSettingsRowIcon(), title: "Litvin", label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .ghostMode(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("eye.slash.fill", .indigo), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleGhost(value)
             })
         case let .voiceChanger(title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("waveform", .pink), title: title, label: value, sectionId: self.section, style: .blocks, action: {
                 arguments.openVoiceChanger()
             })
         case let .plugins(title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("puzzlepiece.extension.fill", .green), title: title, label: value, sectionId: self.section, style: .blocks, action: {
                 arguments.openPlugins()
             })
         case let .ghostInfo(text), let .voiceInfo(text), let .pluginsInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .appearance(title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: self.section, style: .blocks, action: { arguments.openAppearance() })
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("paintbrush.fill", .gray), title: title, label: "", sectionId: self.section, style: .blocks, action: { arguments.openAppearance() })
         case let .extraSwitch(_, key, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinExtraIcon(key), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
             })
         case let .autoReply(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("arrowshape.turn.up.left.fill", .blue), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggleAutoReply(value)
             })
         case let .autoReplyText(text):
-            return ItemListMultilineInputItem(presentationData: presentationData, text: text, placeholder: LitvinFlags.defaultAutoReplyText, maxLength: ItemListMultilineInputItemTextLimit(value: 300, display: false), sectionId: self.section, style: .blocks, textUpdated: { value in
+            return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: LitvinFlags.defaultAutoReplyText, maxLength: ItemListMultilineInputItemTextLimit(value: 300, display: false), sectionId: self.section, style: .blocks, textUpdated: { value in
                 arguments.updateAutoReplyText(value)
             })
         case let .extrasInfo(text), let .autoReplyInfo(text):
@@ -295,29 +305,29 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
         case let .messagesHeader(text), let .privacyHeader(text), let .aboutHeader(text), let .extrasHeader(text), let .autoReplyHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .keepDeleted(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("trash.fill", .red), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(LitvinFlags.keepDeletedKey, value)
             })
         case let .bypassProtection(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("lock.open.fill", .gray), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(LitvinFlags.bypassProtectionKey, value)
             })
         case let .unlimitedViewOnce(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("infinity", .teal), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(LitvinFlags.unlimitedViewOnceKey, value)
             })
         case let .keepDeletedInfo(text), let .bypassProtectionInfo(text), let .unlimitedViewOnceInfo(text), let .info(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .topBadge(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("capsule.fill", .black), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(LitvinFlags.topBadgeKey, value)
             })
         case let .topBadgeInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .version(title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("info.circle.fill", .gray), title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .source(title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("chevron.left.forwardslash.chevron.right", .black), title: title, label: value, sectionId: self.section, style: .blocks, action: {
                 arguments.openSource()
             })
         }
@@ -326,6 +336,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
 
 private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSettingsEntry] {
     return [
+        .header("Версия \(litvinVersion)"),
         .ghostMode("Призрачный режим", state.ghostMode),
         .ghostInfo("Собеседники не видят, что ты прочитал сообщения, печатаешь, прослушал голосовое или был онлайн. Если ты сам отправишь сообщение, Telegram покажет тебя в сети."),
         .voiceChanger("Смена голоса", state.voicePreset),
@@ -411,4 +422,19 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         (controller?.navigationController as? NavigationController)?.pushViewController(c)
     }
     return controller
+}
+
+private func litvinExtraIcon(_ key: String) -> UIImage? {
+    switch key {
+    case LitvinFlags.antiAdsKey:
+        return litvinRowIcon("hand.raised.fill", .orange)
+    case LitvinFlags.editHistoryKey:
+        return litvinRowIcon("pencil", .yellow)
+    case LitvinFlags.localTranscriptionKey:
+        return litvinRowIcon("text.bubble.fill", .purple)
+    case LitvinFlags.confettiKey:
+        return litvinRowIcon("party.popper.fill", .pink)
+    default:
+        return litvinRowIcon("star.fill", .gray)
+    }
 }

@@ -132,7 +132,7 @@ private enum LitvinStatsEntry: ItemListNodeEntry {
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .row(_, _, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .text(_, _, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }

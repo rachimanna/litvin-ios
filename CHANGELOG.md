@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.0] — 2026-11-08
+- Settings → Litvin in the iOS 26 style: glass cards, a Litvin header row and colored SF Symbol icons on every row. The voice, plugins and chat statistics screens use the same style.
+- Chat lock (Face ID) and translate-on-send drafts kept in drafts/ (not compiled yet).
+
 ## [1.3.0] — 2026-11-07
 - Based on Telegram-iOS 13.1.2 (was 13.0.0), built on GitHub's xcode-27 runner (macOS 27, Xcode 27). 13.2 is not buildable from public sources yet: its tgcalls submodule commit is not published.
 - Edit history patch supports the new mergedServerMessageUpdate path of 13.1+.
