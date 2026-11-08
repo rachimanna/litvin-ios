@@ -8,7 +8,7 @@ import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 
-public let litvinVersion = "1.5.0"
+public let litvinVersion = "1.5.1"
 
 private final class LitvinSettingsArguments {
     let toggle: (String, Bool) -> Void
@@ -18,9 +18,8 @@ private final class LitvinSettingsArguments {
     let openVoiceChanger: () -> Void
     let openPlugins: () -> Void
     let openSource: () -> Void
-    let openAppearance: () -> Void
 
-    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openPlugins: @escaping () -> Void, openSource: @escaping () -> Void, openAppearance: @escaping () -> Void) {
+    init(toggle: @escaping (String, Bool) -> Void, toggleGhost: @escaping (Bool) -> Void, toggleAutoReply: @escaping (Bool) -> Void, updateAutoReplyText: @escaping (String) -> Void, openVoiceChanger: @escaping () -> Void, openPlugins: @escaping () -> Void, openSource: @escaping () -> Void) {
         self.toggle = toggle
         self.toggleGhost = toggleGhost
         self.toggleAutoReply = toggleAutoReply
@@ -28,7 +27,6 @@ private final class LitvinSettingsArguments {
         self.openVoiceChanger = openVoiceChanger
         self.openPlugins = openPlugins
         self.openSource = openSource
-        self.openAppearance = openAppearance
     }
 }
 
@@ -58,8 +56,6 @@ private struct LitvinSettingsState: Equatable {
     var autoReply: Bool
     var autoReplyText: String
     var pluginsCount: Int
-    var localPremium: Bool
-    var previewGifts: Bool
 
     static func current(account: Int64) -> LitvinSettingsState {
         let voice = LitvinVoiceSettings.current
@@ -76,9 +72,7 @@ private struct LitvinSettingsState: Equatable {
             localTranscription: LitvinFlags.localTranscription,
             autoReply: LitvinFlags.autoReply,
             autoReplyText: LitvinFlags.autoReplyText,
-            pluginsCount: LitvinPluginManager.shared.allPlugins().count,
-            localPremium: LitvinAppearance.state(account: account).premium,
-            previewGifts: litvinGiftPreviewEnabled(account: account)
+            pluginsCount: LitvinPluginManager.shared.allPlugins().count
         )
     }
 }
@@ -97,7 +91,6 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
     case extrasHeader(String)
     case extraSwitch(Int32, String, String, Bool)
     case extrasInfo(String)
-    case appearance(String)
     case autoReplyHeader(String)
     case autoReply(String, Bool)
     case autoReplyText(String)
@@ -126,7 +119,7 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return LitvinSettingsSection.plugins.rawValue
         case .messagesHeader, .keepDeleted, .keepDeletedInfo:
             return LitvinSettingsSection.messages.rawValue
-        case .extrasHeader, .extraSwitch, .extrasInfo, .appearance:
+        case .extrasHeader, .extraSwitch, .extrasInfo:
             return LitvinSettingsSection.extras.rawValue
         case .autoReplyHeader, .autoReply, .autoReplyText, .autoReplyInfo:
             return LitvinSettingsSection.autoReply.rawValue
@@ -152,7 +145,6 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
         case .extrasHeader: return 20
         case let .extraSwitch(index, _, _, _): return 21 + index
         case .extrasInfo: return 39
-        case .appearance: return 38
         case .autoReplyHeader: return 40
         case .autoReply: return 41
         case .autoReplyText: return 42
@@ -208,9 +200,6 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             return false
         case let .extraSwitch(a1, a2, a3, a4):
             if case let .extraSwitch(b1, b2, b3, b4) = rhs { return a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4 }
-            return false
-        case let .appearance(a):
-            if case let .appearance(b) = rhs { return a == b }
             return false
         case let .extrasInfo(a):
             if case let .extrasInfo(b) = rhs { return a == b }
@@ -286,8 +275,6 @@ private enum LitvinSettingsEntry: ItemListNodeEntry {
             })
         case let .ghostInfo(text), let .voiceInfo(text), let .pluginsInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
-        case let .appearance(title):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: litvinRowIcon("paintbrush.fill", .gray), title: title, label: "", sectionId: self.section, style: .blocks, action: { arguments.openAppearance() })
         case let .extraSwitch(_, key, title, value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: litvinExtraIcon(key), title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.toggle(key, value)
@@ -351,10 +338,7 @@ private func litvinSettingsEntries(state: LitvinSettingsState) -> [LitvinSetting
         .extraSwitch(1, LitvinFlags.editHistoryKey, "История правок", state.editHistory),
         .extraSwitch(2, LitvinFlags.localTranscriptionKey, "Голосовые в текст", state.localTranscription),
         .extraSwitch(3, LitvinFlags.confettiKey, "Конфетти", state.confetti),
-        .extraSwitch(4, "litvin.localPremium", "Локальный Premium", state.localPremium),
-        .extraSwitch(5, "litvin.previewGifts", "Подарки без списания звёзд", state.previewGifts),
-        .appearance("Оформление, номер и звёзды"),
-        .extrasInfo("Подарки без списания звёзд видны только на этом устройстве. Выбор — в обычном каталоге профиля. История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или . Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
+        .extrasInfo("История правок: долгое нажатие на изменённое сообщение → «История правок». Голосовые в текст распознаются прямо на телефоне, без Premium. Конфетти летит, когда ты пишешь «С днём рождения», «Поздравляю», «Ура» или 🎉. Статистика переписки и «Прочитать для собеседника» — долгое нажатие на чат в списке чатов."),
         .autoReplyHeader("АВТООТВЕТ"),
         .autoReply("Автоответ в личных чатах", state.autoReply),
         .autoReplyText(state.autoReplyText),
@@ -374,14 +358,6 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
     var pushControllerImpl: ((ViewController) -> Void)?
 
     let arguments = LitvinSettingsArguments(toggle: { key, value in
-        if key == "litvin.previewGifts" {
-            LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.giftPreviewEnabled = value }
-            statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64())); return
-        }
-        if key == "litvin.localPremium" {
-            LitvinAppearance.update(account: context.account.peerId.toInt64()) { $0.premium = value }
-            statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64())); return
-        }
         LitvinFlags.setEnabled(key, value)
         NotificationCenter.default.post(name: Notification.Name("LitvinFlagsChanged"), object: nil)
         statePromise.set(LitvinSettingsState.current(account: context.account.peerId.toInt64()))
@@ -401,14 +377,11 @@ public func litvinSettingsController(context: AccountContext) -> ViewController 
         if let url = URL(string: "https://github.com/rachimanna/litvin-ios") {
             UIApplication.shared.open(url)
         }
-    }, openAppearance: {
-        LitvinAppearanceTools.show(context: context)
     })
 
-    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get(), litvinAppearanceUpdates())
+    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get())
     |> deliverOnMainQueue
-    |> map { presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let state = LitvinSettingsState.current(account: context.account.peerId.toInt64())
+    |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Litvin"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: litvinSettingsEntries(state: state), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))

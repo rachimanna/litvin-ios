@@ -13,8 +13,6 @@ if [ -f "$LITVIN_ROOT/scripts/litvin_patch.py" ]; then
   python3 "$LITVIN_ROOT/scripts/litvin_patch.py" "$TG_ROOT"
 fi
 
-python3 "$LITVIN_ROOT/scripts/appearance_patch.py" "$TG_ROOT"
-
 if [ -d "$LITVIN_ROOT/patches" ]; then
   shopt -s nullglob
   for p in "$LITVIN_ROOT/patches"/*.patch; do

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.1] — 2026-11-08
+- Removed the local Premium, display phone number, local Stars balance, NFT/gift previews in profiles and gift cards in chats (appearance and native gift patches, their overlay files, settings rows, tests and validation workflow), and the unused FakeGift stub.
+- Kept the build fixes: Telegram 13.0.0 on macOS 26 / Xcode 26.6 and scripts/verify_runtime.py, now run by the "Validate Litvin patches" workflow.
+
 ## [1.5.0] — 2026-11-08
 - Settings → Litvin in the iOS 26 style: glass cards, a Litvin header row and colored SF Symbol icons on every row. The voice, plugins and chat statistics screens use the same style.
 - Chat lock (Face ID) and translate-on-send drafts kept in drafts/ (not compiled yet).
